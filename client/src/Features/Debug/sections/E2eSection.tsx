@@ -164,6 +164,7 @@ export default function E2eSection({ activeRunId }: { activeRunId: number | null
                                     <span className={styles.rowTitle}>{s.label}</span>
                                     <span className={styles.rowMeta}>
                                         {s.sourceLabel}
+                                        {s.external ? ` · dépend de ${s.external}` : ''}
                                         {s.skip ? ` · ${s.skip}` : ''}
                                     </span>
                                 </Checkbox>

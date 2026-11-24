@@ -91,7 +91,7 @@ npm run dev
 ```
 
 `SEED_DEV=true` dans `.env` crée un compte de dev au premier démarrage
-(`dev` / `devdevdev` par défaut).
+(`dev` / `devdevdev` par défaut), sans code par mail à la connexion.
 
 ## Licence
 

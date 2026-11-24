@@ -27,13 +27,15 @@ export async function seedDevAccount(pool: DbPool): Promise<void> {
         return;
     }
 
-    const { personalWorkspaceId } = await openAccount(db, {
+    const { user, personalWorkspaceId } = await openAccount(db, {
         email: DEV_EMAIL,
         username: DEV_USERNAME,
         passwordHash: await hashPassword(DEV_PASSWORD),
         role: 'admin',
         termsAcceptedAt: null
     });
+    // Son adresse n'a pas de boîte : un code par mail n'y serait jamais lu.
+    await db.users.setLoginEmailCheck(user.id, false);
     await db.workspaces.updateFeatures(personalWorkspaceId, DEV_FEATURES);
 
     logger.warn(

@@ -221,7 +221,7 @@ Côté module, la même règle s'écrit `ctx.cipher()` (étage ouvert) et
 cd DevEye-Types && npm run ci          # types
 cd DevEye        && npm run ci          # lint, format, typecheck, tests, glue
 cd DevEye        && npm run ci:features # modules in-repo
-cd DevEye        && npm run ci:smoke    # smoke E2E de chaque module (il lui faut la base)
+cd DevEye        && npm run ci:smoke    # smoke E2E de chaque module, puis les parcours (il lui faut la base)
 cd DevEye        && npm run check:queries # chaque requête préparée sur la base migrée
 cd DevEye/client && npm run ci          # lint, typecheck, check:sdk, tests, build
 ```

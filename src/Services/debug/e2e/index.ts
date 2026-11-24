@@ -56,7 +56,8 @@ export function createE2e(deps: E2eServiceDeps) {
                     id: sc.id,
                     label: sc.label,
                     sourceLabel: sc.sourceLabel,
-                    skip: (await sc.skip?.(deps)) ?? null
+                    skip: (await sc.skip?.(deps)) ?? null,
+                    external: sc.external ?? null
                 }))
             );
             return {

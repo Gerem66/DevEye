@@ -1,28 +1,28 @@
 /**
  * `npm run ci:smoke` : le smoke E2E (`smoke-feature.ts`) de chaque module
- * installé, autonome : construit le client dans un dossier à lui, démarre un
- * serveur à lui, sonde chaque module, et éteint tout.
+ * installé, puis les parcours de la page « Tests et débogage »
+ * (`e2e-all.ts`), sur un même serveur. Autonome : construit le client dans un
+ * dossier à lui, démarre un serveur à lui, et éteint tout.
  *
  * Il lui faut une base MySQL joignable (variables DB_*) et un Chromium
  * (`SMOKE_BROWSER`, défaut chromium-browser).
  *
  * Isolé du dev qui tourne à côté : port SMOKE_PORT (défaut 3999), client
  * construit dans .smoke/client à la racine (jamais client/build, que le ci du
- * client reconstruit en parallèle), rate limit relevé pour que les connexions
- * enchaînées ne se bloquent pas entre elles.
+ * client reconstruit en parallèle).
  *
  * Les modules : ceux de features.config.json et de features.local.json.
  */
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { importManifest, readFeatureConfig, type FeatureConfigEntry } from './lib/features-config';
+import { startTestServer } from './lib/test-server';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.SMOKE_PORT ?? 3999);
-const BASE_URL = `http://localhost:${PORT}`;
 // Hors de client/ : un dossier de plus sous client/ tomberait sous son
 // `eslint .` (des bundles minifiés à linter).
 const SMOKE_DIR = path.join(ROOT, '.smoke');
@@ -30,7 +30,7 @@ const CLIENT_DIR = path.join(SMOKE_DIR, 'client');
 const TSX = path.join(ROOT, 'node_modules', '.bin', 'tsx');
 
 function fail(message: string): never {
-    console.error(`\n✗ ci:smoke — ${message}`);
+    console.error(`\n✗ ci:smoke : ${message}`);
     process.exit(1);
 }
 
@@ -58,49 +58,6 @@ function run(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.Pro
     return res.status === 0;
 }
 
-/**
- * Ce que le serveur a journalisé, depuis l'octet `fromByte` : le tour d'un
- * module n'imprime alors que SES lignes. C'est le seul endroit où figure la
- * raison d'un refus, qu'un magasin client avale en silence, et le fichier part
- * avec le runner.
- */
-function tailServerLog(logFile: string, fromByte = 0): void {
-    let lines: string[] = [];
-    try {
-        lines = fs
-            .readFileSync(logFile)
-            .subarray(fromByte)
-            .toString('utf8')
-            .split('\n')
-            .filter((l) => l.trim() !== '');
-    } catch {
-        return;
-    }
-    if (lines.length === 0) return;
-    console.error('  journal du serveur:');
-    for (const line of lines.slice(-30)) console.error(`    ${line}`);
-}
-
-async function waitForServer(server: ChildProcess, logFile: string): Promise<void> {
-    const deadline = Date.now() + 90_000;
-    while (Date.now() < deadline) {
-        if (server.exitCode !== null) {
-            tailServerLog(logFile);
-            fail(
-                `le serveur s'est arrêté avant d'être prêt (code ${server.exitCode}) — base joignable ? variables DB_* ?`
-            );
-        }
-        try {
-            const res = await fetch(`${BASE_URL}/`);
-            if (res.ok) return;
-        } catch {
-            // pas encore à l'écoute
-        }
-        await new Promise((r) => setTimeout(r, 1000));
-    }
-    fail('le serveur ne répond pas après 90 s');
-}
-
 async function main(): Promise<void> {
     const entries = [
         ...readFeatureConfig(ROOT, 'features.config.json'),
@@ -118,7 +75,7 @@ async function main(): Promise<void> {
         fail(
             only.size > 0 ? `aucun module installé parmi : ${[...only].join(', ')}` : 'aucun module installé à sonder'
         );
-    console.log(`ci:smoke — ${modules.length} module(s) : ${modules.map((m) => m.id).join(', ')}`);
+    console.log(`ci:smoke : ${modules.length} module(s) : ${modules.map((m) => m.id).join(', ')}`);
 
     // La glue locale doit exister (le serveur l'importe statiquement) et le
     // client se construit dans SON dossier.
@@ -128,60 +85,49 @@ async function main(): Promise<void> {
         fail('la construction du client a échoué');
     }
 
-    const logFile = path.join(SMOKE_DIR, 'server.log');
-    const log = fs.openSync(logFile, 'w');
-    const server = spawn(TSX, ['index.ts'], {
-        cwd: ROOT,
-        env: {
-            ...process.env,
-            SEED_DEV: 'true',
-            LISTEN_PORT: String(PORT),
-            PUBLIC_ORIGIN: BASE_URL,
-            CLIENT_DIR,
-            // Les smokes se connectent à la chaîne : le rate limit ordinaire
-            // (200/min) les ferait se bloquer entre eux.
-            RATE_LIMIT_MAX: '100000'
-        },
-        stdio: ['ignore', log, log]
-    });
-    const stopServer = (): void => {
-        if (server.exitCode === null) server.kill('SIGTERM');
-        setTimeout(() => {
-            if (server.exitCode === null) server.kill('SIGKILL');
-        }, 3000).unref();
-    };
-    process.on('exit', stopServer);
-
-    await waitForServer(server, logFile);
-    console.log(`serveur prêt sur ${BASE_URL} (journal : ${path.relative(ROOT, logFile)})\n`);
+    const server = await startTestServer({ root: ROOT, port: PORT, clientDir: CLIENT_DIR }).catch((e: Error) =>
+        fail(e.message)
+    );
+    console.log(`serveur prêt sur ${server.baseUrl} (journal : ${path.relative(ROOT, server.logFile)})\n`);
 
     // Toutes les migrations viennent de passer : chaque table doit avoir un
     // sort dans l'export des données d'un compte, que le boot ne fait que signaler.
     if (only.size === 0 && !run(TSX, [path.join(ROOT, 'scripts', 'export-coverage.ts')])) {
-        stopServer();
+        server.stop();
         fail('des tables n’ont aucun sort dans l’export des données (Docs/ACCOUNT_EXPORT.md)');
     }
 
     const failed: string[] = [];
     for (const m of modules) {
-        const from = fs.statSync(logFile).size;
+        const from = server.logSize();
         const ok = run(TSX, [
             path.join(ROOT, 'scripts', 'smoke-feature.ts'),
             m.id,
             m.label,
-            `--url=${BASE_URL}`,
+            `--url=${server.baseUrl}`,
             ...(m.accountOnly ? ['--account'] : []),
             ...(m.moderationTab !== null ? [`--moderation=${m.moderationTab}`] : [])
         ]);
         if (!ok) {
             failed.push(m.id);
-            tailServerLog(logFile, from);
+            server.tailLog(from);
         }
     }
 
-    stopServer();
+    // Un tour restreint à quelques modules ne rejoue pas les parcours :
+    // `npm run e2e` les lance seuls.
+    let journeys = true;
+    if (only.size === 0) {
+        console.log('');
+        const from = server.logSize();
+        journeys = run(TSX, [path.join(ROOT, 'scripts', 'e2e-all.ts'), `--url=${server.baseUrl}`, '--open-signups']);
+        if (!journeys) server.tailLog(from);
+    }
+
+    server.stop();
     if (failed.length > 0) fail(`${failed.length} module(s) en échec : ${failed.join(', ')}`);
-    console.log(`\n✓ ci:smoke — ${modules.length}/${modules.length} module(s) sondés avec succès.`);
+    if (!journeys) fail('des parcours de bout en bout sont en échec');
+    console.log(`\n✓ ci:smoke : ${modules.length}/${modules.length} module(s) sondés avec succès.`);
     process.exit(0);
 }
 

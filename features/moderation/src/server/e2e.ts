@@ -11,6 +11,7 @@ export const moderationE2e: FeatureE2eEntry<ModerationRepo> = {
         {
             id: 'rules',
             label: 'Poser et retirer des règles',
+            moderator: true,
             steps: [
                 {
                     label: 'Ajouter deux motifs de nom',

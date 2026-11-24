@@ -1,0 +1,26 @@
+# An advisory against a package the server ships does not wait for a push: the
+# lockfile of a quiet week is the one that ages.
+name: npm audit
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # The lockfile alone: nothing is installed. Development tools are left
+      # out, they never reach a running instance.
+      - name: Audit
+        run: npm audit --omit=dev --audit-level=high

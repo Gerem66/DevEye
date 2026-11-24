@@ -424,6 +424,19 @@ describe('registerModules : les sentinelles', () => {
                 ]),
             /e2e déclaré vide/
         );
+        assert.throws(
+            () =>
+                registerModules([
+                    {
+                        manifest: manifest('x-sdke2e3'),
+                        server: {
+                            features: [],
+                            e2e: { scenarios: [{ id: 'tiers', label: 'x', external: ' ', steps: [step] }] }
+                        }
+                    }
+                ]),
+            /« tiers » dépend d'un tiers sans le nommer/
+        );
     });
 
     it('moduleManifest retrouve un module enregistré par son id', () => {

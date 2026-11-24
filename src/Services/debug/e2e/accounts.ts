@@ -27,12 +27,13 @@ export async function removerOf(db: Database, launcher: { id: number }): Promise
 /**
  * Un compte jetable, créé par le même chemin qu'une inscription. `passwordHash`
  * : le hachage du mot de passe de l'identité, quand plusieurs comptes le
- * partagent (un hachage Argon2 par compte pèserait sur la mesure).
+ * partagent (un hachage Argon2 par compte pèserait sur la mesure). `moderator`
+ * : le compte naît modérateur de l'instance.
  */
 export async function openTestAccount(
     db: Database,
     identity: TestIdentity,
-    passwordHash?: string
+    { passwordHash, moderator = false }: { passwordHash?: string; moderator?: boolean } = {}
 ): Promise<{ userId: number; workspaceId: number }> {
     const hash = passwordHash ?? (await hashPassword(identity.password));
     const { user, personalWorkspaceId } = await db.transaction((tx) =>
@@ -40,7 +41,7 @@ export async function openTestAccount(
             email: identity.email,
             username: identity.username,
             passwordHash: hash,
-            role: 'user',
+            role: moderator ? 'moderator' : 'user',
             termsAcceptedAt: null
         })
     );

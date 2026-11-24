@@ -1,6 +1,6 @@
 import { check, expectRefusal, type E2eContext, type E2eScenario } from '../scenario';
 
-const ROLE = { name: 'Essai', color: '#22d3ee', features: [] };
+const ROLE = { name: 'Essai', color: '#22d3ee', features: [], allFeatures: false };
 
 const workspaceOf = (ctx: E2eContext): number => ctx.state.get('workspaceId') as number;
 

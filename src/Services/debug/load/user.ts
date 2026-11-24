@@ -62,7 +62,7 @@ export async function simulateUser(identity: TestIdentity, env: UserEnv): Promis
     const send = timedSend(client, env);
     try {
         try {
-            await openTestAccount(env.db, identity, env.passwordHash);
+            await openTestAccount(env.db, identity, { passwordHash: env.passwordHash });
             const started = performance.now();
             await signIn(client, identity);
             const me = await client.http('/api/auth/me');

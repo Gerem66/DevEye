@@ -53,6 +53,10 @@ export interface E2eScenario {
     /** Les comptes jetables ouverts et connectés avant la première étape. */
     accounts: 0 | 1 | 2;
     skip?(deps: E2eDeps): Promise<string | null> | string | null;
+    /** Le tiers sans lequel il ne peut pas réussir : la CI le laisse de côté. */
+    external?: string;
+    /** Ses comptes jetables naissent modérateurs de l'instance. */
+    moderator?: boolean;
     steps: readonly E2eStep[];
 }
 
@@ -134,6 +138,8 @@ export function fromModule(featureId: string, label: string, scenario: SdkE2eSce
             maintenance.featureLevel(featureId)
                 ? `« ${label} » est en maintenance`
                 : ((await scenario.skip?.({ origins: deps.origins })) ?? null),
+        external: scenario.external,
+        moderator: scenario.moderator,
         steps: scenario.steps.map((step) => ({
             label: step.label,
             timeoutMs: step.timeoutMs,

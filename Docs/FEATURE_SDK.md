@@ -709,7 +709,9 @@ entrée du menu du profil ; un module de la seule popup « Modération »
 popup et son premier onglet. `npm run ci:smoke` (`scripts/smoke-all.ts`) construit
 le client dans `.smoke/client`, démarre un serveur à lui (`SMOKE_PORT`, 3999
 par défaut), sonde chaque module de `features.config.json` et de
-`features.local.json`, et éteint tout.
+`features.local.json`, joue les parcours de bout en bout que le socle et les
+modules déclarent (`e2e`, voir `Docs/DEBUG.md`), et éteint tout. `npm run e2e
+-- <module>.<parcours>` rejoue un parcours seul, sans construire le client.
 
 ### L'installation privée
 

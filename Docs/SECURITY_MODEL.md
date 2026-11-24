@@ -919,9 +919,13 @@ pendant qu'une session est déverrouillée.
 À chaque poussée : les tests unitaires du serveur, du client, des modules et de
 l'agent ; un test qui confronte chaque requête des dépôts du socle à la garde
 qu'elle déclare (espace, compte, appareil) ; un contrôle qui prépare, sur une
-base MySQL jetable, chaque requête SQL que le serveur peut envoyer ; et un
-passage qui ouvre chaque module dans un vrai navigateur. Les avis de sécurité
-des crates de l'agent sont relus chaque semaine.
+base MySQL jetable, chaque requête SQL que le serveur peut envoyer ; un
+passage qui ouvre chaque module dans un vrai navigateur ; et les parcours de
+la page « Tests et débogage », joués par des comptes jetables sur un serveur
+démarré pour l'occasion : inscription et suppression d'un compte, espace
+partagé à deux, double authentification, code par mail, mot de passe oublié,
+et ceux que les modules déclarent. Les avis de sécurité des crates de l'agent
+et des paquets npm du serveur sont relus chaque semaine.
 
 Ces contrôles sont écrits et tenus par le projet lui-même. Aucun tiers n'a
 encore audité DevEye ni tenté de s'y introduire : les garanties de ce document

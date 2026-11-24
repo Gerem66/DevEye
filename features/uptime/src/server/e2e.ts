@@ -133,6 +133,7 @@ export const uptimeE2e: FeatureE2eEntry<UptimeRepo> = {
                             integrity: {
                                 intervalSeconds: WATCH_FILES.integrityIntervalSeconds,
                                 paths: [],
+                                excluded: [],
                                 deployAccept: true,
                                 deploySources: [],
                                 deployHook: true
@@ -178,7 +179,8 @@ async function readingsOf(
 ): Promise<UptimeIntegrityReading[]> {
     const { readings } = await ctx.send<{ readings: UptimeIntegrityReading[] }>('uptime.integrityReadings', {
         id,
-        limit: 20
+        limit: 20,
+        filter: { since: null, failuresOnly: false }
     });
     return readings;
 }

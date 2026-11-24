@@ -19,9 +19,9 @@ client est dans `client/src/Features/Debug/`.
 
 Un parcours ouvre des comptes jetables, les fait passer par les vrais chemins
 (HTTP et socket vers ce serveur même, dispatcheur compris), puis les supprime
-avec tout ce qu'ils ont créé. Le socle en déclare trois (cycle de compte,
-espace partagé, double authentification), les modules les leurs
-(`FeatureServer.e2e`).
+avec tout ce qu'ils ont créé. Le socle en déclare cinq (cycle de compte,
+espace partagé, double authentification, code par mail, mot de passe oublié),
+les modules les leurs (`FeatureServer.e2e`).
 
 ### Zéro résidu, même après un plantage
 
@@ -61,7 +61,11 @@ serveur même : l'adresse TCP réelle, qu'aucun en-tête transmis ne change.
 ### Ajouter un scénario
 
 Dans un module : une entrée `e2e` de son `FeatureServer`, un scénario
-(`id`, `label`, `skip?`, `steps`), des étapes qui lèvent pour échouer. Le
+(`id`, `label`, `skip?`, `external?`, `moderator?`, `steps`), des étapes qui
+lèvent pour échouer. `external` nomme le tiers sans lequel il ne peut pas
+réussir (GitHub, Stripe) : la page l'affiche, la CI le laisse de côté.
+`moderator` ouvre le compte jetable en modérateur de l'instance, ce qu'il faut
+pour envoyer une commande déclarée `moderation: true`. Le
 contexte (`SdkE2eContext`) donne un compte jetable connecté, `send` par sa
 socket, `fetch` vers une route publique, `waitFor`, et `defer`, à appeler
 juste après avoir créé quelque chose, avant ce qui peut échouer. `fetch` rend
@@ -82,6 +86,42 @@ facturation des comptes déclare un `sweep`.
 
 Dans le socle : `src/Services/debug/e2e/scenarios/`, même forme, avec
 `accounts: 0 | 1 | 2` pour les comptes ouverts avant la première étape.
+
+### Hors de la page : `npm run e2e`
+
+Les mêmes parcours, lancés sans navigateur (`scripts/e2e-all.ts`) : le compte
+de développement semé se connecte, lit le catalogue, lance les parcours par
+lots et suit chaque essai par `debug.runGet`, comme la page.
+
+| Commande                         | Ce qu'elle lance                                                                   |
+| -------------------------------- | ---------------------------------------------------------------------------------- |
+| `npm run e2e`                    | un serveur à lui (l'API seule), puis tous les parcours qui ne dépendent que de lui |
+| `npm run e2e -- notes.lifecycle` | ceux qu'on nomme, tels quels                                                       |
+| `npm run e2e -- --external`      | aussi ceux qui dépendent d'un tiers                                                |
+| `npm run ci:smoke`               | le smoke de chaque module, puis ce même tour sur le serveur du smoke               |
+
+Le tour échoue sur une étape ratée, un ménage incomplet, un compte d'essai
+resté en base, ou un parcours qui se dit ignoré (`scripts/lib/e2e-report.ts`).
+Un parcours qui ne peut vraiment pas tourner quelque part s'y nomme dans
+`E2E_EXPECTED_SKIPS` (identifiants séparés par des virgules ; celle de la CI
+est dans `.github/workflows/ci.yml`). Un nom que le serveur ne connaît plus
+le fait échouer aussi : la liste ne vieillit pas en silence.
+
+Le serveur du tour (`scripts/lib/test-server.ts`) part de l'environnement du
+poste et y impose ce qui le rend reproductible :
+
+- un expéditeur de mails déclaré sur un port où rien n'écoute : les parcours à
+  mail tournent, la boîte des essais retient leurs mails, et aucun autre ne
+  quitte le poste ;
+- pas de second écouteur (`PUBLIC_LISTEN_PORT` vide) ni de stockage objet
+  (`STORAGE_S3_ENDPOINT` vide) ;
+- `OUTBOUND_ALLOW_PRIVATE`, pour qu'une surveillance d'Uptime joigne ce serveur
+  à son adresse locale ;
+- les inscriptions ouvertes, sans quoi le cycle de vie d'un compte s'ignore.
+  Le réglage est rangé par origine : il ne vaut que pour ce serveur d'essai.
+
+La base reste celle des variables `DB_*` : une base jetable, ou toute base où
+un essai a le droit de tourner.
 
 ## 2. Les mesures
 

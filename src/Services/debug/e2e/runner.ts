@@ -59,10 +59,12 @@ function withTimeout<T>(work: Promise<T>, ms: number, signal: AbortSignal): Prom
     });
 }
 
-async function openAccounts(ctx: E2eContext, env: RunnerEnv, count: number): Promise<string> {
-    for (let i = 0; i < count; i++) {
+async function openAccounts(ctx: E2eContext, env: RunnerEnv, scenario: E2eScenario): Promise<string> {
+    for (let i = 0; i < scenario.accounts; i++) {
         const identity = ctx.newIdentity();
-        const { userId, workspaceId } = await openTestAccount(env.deps.db, identity);
+        const { userId, workspaceId } = await openTestAccount(env.deps.db, identity, {
+            moderator: scenario.moderator
+        });
         // Inscrit avant toute autre chose : défait en dernier, il emporte ce que le compte possède.
         ctx.ledger.defer(`Supprimer ${identity.username}`, () => ctx.removeAccount({ userId, email: identity.email }));
         const client = ctx.newClient();
@@ -122,8 +124,7 @@ export async function runScenario(
             report.status = 'running';
             const t0 = performance.now();
             try {
-                const work =
-                    i === 0 && scenario.accounts > 0 ? openAccounts(ctx, env, scenario.accounts) : step.run(ctx);
+                const work = i === 0 && scenario.accounts > 0 ? openAccounts(ctx, env, scenario) : step.run(ctx);
                 const detail = await withTimeout(work, step.timeoutMs ?? STEP_MS, signal);
                 report.status = 'passed';
                 report.detail = detail ? cap(detail) : null;

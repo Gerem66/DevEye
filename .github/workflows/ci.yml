@@ -65,11 +65,13 @@ jobs:
         run: npm run ci:features
 
   # Smoke E2E of every installed feature module: a real server on a fresh
-  # MySQL, the built client, a real Chrome — the only guard for the bug class
-  # nothing else sees (command registry, catalog, blank page). See
-  # scripts/smoke-all.ts.
+  # MySQL, the built client, a real Chrome. The only guard for the bug class
+  # nothing else sees (command registry, catalog, blank page). Then, on that
+  # same server, the end-to-end journeys of the Tests and debugging page:
+  # throwaway accounts through the real routes and the whole dispatcher. See
+  # scripts/smoke-all.ts and scripts/e2e-all.ts.
   smoke:
-    name: smoke (features E2E)
+    name: smoke + journeys (E2E)
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -104,6 +106,14 @@ jobs:
       DEVICE_TOKEN_SECRET: ci-smoke-device-token-0123456789abcdef0123456789
       ORDER_SIGNING_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
       SMOKE_BROWSER: google-chrome
+      # The modules that keep files write under /data by default, which a
+      # runner does not own: the journeys that upload would fail there.
+      WHITEBOARD_STORAGE_DIR: ${{ github.workspace }}/.smoke/storage/whiteboard
+      CONVERT_STORAGE_DIR: ${{ github.workspace }}/.smoke/storage/convert
+      # Journeys allowed to report themselves skipped on this runner, by id and
+      # comma-separated. Any other skip fails the job, so does a name the
+      # server no longer knows.
+      E2E_EXPECTED_SKIPS: ''
     steps:
       - uses: actions/checkout@v6
 
@@ -120,8 +130,19 @@ jobs:
         working-directory: client
         run: npm install
 
-      - name: Smoke every installed module
+      - name: Smoke every installed module, then run the journeys
         run: npm run ci:smoke
+
+      # The reason of a refusal is only in the server's log.
+      - name: Keep the server log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-server-log
+          path: .smoke/server.log
+          # `.smoke` is a hidden folder, left out by default.
+          include-hidden-files: true
+          if-no-files-found: ignore
 
       # The smoke has just migrated the throwaway base from scratch, on the
       # server's default collation: the committed schema must match it to the

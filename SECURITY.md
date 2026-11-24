@@ -51,9 +51,13 @@ and automated scanner output without a working proof.
 Every push runs the unit tests of the server, the client, the modules and the
 agent; a test that checks every query of the core repositories against the
 guard it declares (workspace, account, device); a check that prepares, on a
-throwaway MySQL database, every SQL statement the server can send; and a pass
-that opens every module in a real browser. Dependency advisories are checked
-every week for the agent's crates.
+throwaway MySQL database, every SQL statement the server can send; a pass
+that opens every module in a real browser; and the journeys of the "Tests and
+debugging" page, played by throwaway accounts against a server started for the
+occasion: signing up and deleting an account, a workspace shared by two, two-
+factor authentication, the emailed sign-in code, the forgotten password, and
+those the modules declare. Dependency advisories are checked every week for
+the agent's crates and for the server's npm packages.
 
 These checks are written and maintained by the project itself. No third party
 has audited DevEye or tested it for intrusion yet: read the guarantees of the

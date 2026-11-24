@@ -127,6 +127,8 @@ function debugEntriesProblem({ manifest, server }: InstalledFeatureModule): stri
         return "un échantillon envoyé par le serveur exige la capacité 'accounts.mail'";
     }
     if (server.e2e && scenarios.length === 0 && !server.e2e.sweep) return 'e2e déclaré vide';
+    const unnamed = scenarios.find((sc) => sc.external !== undefined && sc.external.trim() === '');
+    if (unnamed) return `e2e : « ${unnamed.id} » dépend d'un tiers sans le nommer`;
     return null;
 }
 
