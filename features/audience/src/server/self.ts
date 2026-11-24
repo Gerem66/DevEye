@@ -14,7 +14,8 @@ import { createFormRecord } from './forms';
 import type { AudienceRepo } from './repo';
 import type { AudienceIngest } from './service';
 import { createSiteRecord } from './sites';
-import { nameRef, readJson, type StoredSite } from './_shared';
+import { formNameRef } from './refs';
+import { readJson, type StoredSite } from './_shared';
 
 /**
  * Le suivi d'usage de DevEye lui-même : l'app déclare ici le site où elle
@@ -29,7 +30,12 @@ export function createSelfProvider(
     return {
         async createSite(workspaceId, { name, host, description, measuredBy }) {
             const row = await createSiteRecord(
-                { repo: deps.repo, cipher: deps.cipherFor(workspaceId), quota: deps.quotaFor(workspaceId) },
+                {
+                    repo: deps.repo,
+                    cipher: deps.cipherFor(workspaceId),
+                    quota: deps.quotaFor(workspaceId),
+                    keys: deps.keys
+                },
                 workspaceId,
                 {
                     name,
@@ -56,7 +62,7 @@ export function createSelfProvider(
         },
 
         async declareForm(workspaceId, siteId, { name, fields }) {
-            const existing = await deps.repo.findFormByName(siteId, nameRef(name));
+            const existing = await deps.repo.findFormByName(siteId, formNameRef(deps.keys, siteId, name));
             if (existing) return { formId: Number(existing.id) };
             const declared: AudienceFormField[] = fields.map((field) => ({
                 name: field.name,
@@ -65,7 +71,8 @@ export function createSelfProvider(
                 choices: [...(field.choices ?? [])],
                 multiple: field.multiple ?? false
             }));
-            const formId = await createFormRecord({ repo: deps.repo, cipher: deps.cipherFor(workspaceId) }, siteId, {
+            const scope = { repo: deps.repo, cipher: deps.cipherFor(workspaceId), keys: deps.keys };
+            const formId = await createFormRecord(scope, siteId, {
                 name,
                 mode: 'strict',
                 fields: declared

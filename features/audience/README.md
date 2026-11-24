@@ -58,6 +58,16 @@ Un chemin vu mille fois est stocké **une** fois ; les tables de faits ne porten
 que son identifiant entier. On agrège sans clé, et l'on ne déchiffre que les
 quelques dizaines de libellés qu'un écran affiche réellement.
 
+`label_ref` retrouve la ligne d'un libellé sans la déchiffrer : un condensé à
+clé (`keys.ref`, 32 caractères), lié au site. Un SHA-256 nu se recalculerait en
+devinant le chemin, et le même chemin se reconnaîtrait d'un site à l'autre. Le
+même motif porte le nom d'un site (lié à son espace), d'un entonnoir et d'un
+formulaire, et les questions et valeurs comptées d'un formulaire (liés au
+site). La marche d'un entonnoir porte le condensé du libellé qu'elle attend :
+c'est par lui qu'elle le retrouve. Toutes les déclarations sont dans
+`refs.ts` ; l'arbre de `copy.ts` les porte (`digests`), une copie arrive avec
+les siens, et l'étape de données `001-keyed-refs` a repris les lignes d'avant.
+
 **Une seule table de dimensions** discriminée par `kind` (les valeurs
 d'`audienceDimensionSchema`), et non une par axe : une ligne de rekey au lieu
 de dix, un seul cache, un seul chemin de résolution.
@@ -698,7 +708,8 @@ copy.ts         audienceTree : ce dont un site est fait (colonnes scellées), la
 move.ts         le changement d'espace d'un site (rescellement, nom unique)
 accountExport.ts  l'export des données du compte, table par table
 e2e.ts          le scénario de bout en bout : déclarer, recevoir une visite par la route publique, compter
-normalize.ts    chemins, hôtes, référents, condensés, clés de jour et de mois (pur)
+normalize.ts    chemins, hôtes, référents, condensé d'un visiteur, clés de jour et de mois (pur)
+refs.ts         les condensés à clé : noms (site, entonnoir, formulaire), libellés mesurés, réponses comptées
 userAgent.ts    navigateur / système / appareil, détection des robots (pur)
 *.test.ts       handlers, forms, service, routes, answers, validate, normalize, repo, move, accountExport
                 (harnais @deveye/types/sdk/testing)

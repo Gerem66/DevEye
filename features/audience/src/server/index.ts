@@ -2,11 +2,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { AUDIENCE_ITEMS_PROVIDER, AUDIENCE_SELF_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
-import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
+import { rekeyTreeDigests, type FeatureServer, type SdkCipher } from '@deveye/types/sdk/server';
 
 import { audienceAccountExport } from './accountExport';
 import { audienceHandlers } from './handlers';
-import { audienceCopy } from './copy';
+import { audienceCopy, audienceTree } from './copy';
 import { audienceMove } from './move';
 import { monthKey } from './normalize';
 import { createRepo, type AudienceRepo } from './repo';
@@ -55,6 +55,22 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
     e2e: audienceE2e,
     features: audienceHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    dataSteps: [
+        {
+            // Les condensés passent d'un SHA-256 nu à `keys.ref`, liés à l'espace ou au site.
+            id: '001-keyed-refs',
+            async run({ q, cipherFor, keys, logger }) {
+                const pass = await rekeyTreeDigests(q, audienceTree, { cipherFor, keys });
+                // Un libellé illisible ne se retrouve plus : la prochaine mesure de la même page en crée un autre.
+                if (pass.unreadable > 0) {
+                    logger.error(
+                        { unreadable: pass.unreadable },
+                        'Audience : des lignes illisibles ont perdu leur condensé'
+                    );
+                }
+            }
+        }
+    ],
     quotas: {
         sites: { list: (repo, owned) => repo.listStock(owned) },
         events: { count: (repo, owned) => repo.monthlyEvents(owned, monthKey(Math.floor(Date.now() / 1000))) }

@@ -18,7 +18,6 @@ import {
     ingestOf,
     loadHomeSite,
     loadSite,
-    nameRef,
     packOrigins,
     packTransitPaths,
     projectCountsOf,
@@ -28,6 +27,7 @@ import {
     type Ctx,
     type StoredSite
 } from './_shared';
+import { siteNameRef } from './refs';
 
 /**
  * Les sites suivis de l'espace : inventaire, réglages, clé, ordre. Rien ici ne
@@ -131,7 +131,7 @@ export const audienceSiteAddFeature = defineSdkFeature({
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
         const created = await createSiteRecord(
-            { repo: ctx.repo, cipher: ctx.cipher(), quota: ctx.quota },
+            { repo: ctx.repo, cipher: ctx.cipher(), quota: ctx.quota, keys: ctx.keys },
             ctx.workspaceId,
             input
         );
@@ -148,7 +148,7 @@ export const audienceSiteUpdateFeature = defineSdkFeature({
         // Domicile seulement : les réglages d'un site (origines, rétention, mode
         // visiteur) appartiennent à son espace.
         await loadHomeSite(ctx, input.siteId);
-        const ref = nameRef(input.name);
+        const ref = siteNameRef(ctx.keys, ctx.workspaceId, input.name);
         const clash = await ctx.repo.findByName(ctx.workspaceId, ref);
         if (clash && clash.id !== input.siteId) {
             throw new FeatureError('validation', 'Un site porte déjà ce nom dans cet espace.');

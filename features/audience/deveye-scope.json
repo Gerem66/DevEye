@@ -14,10 +14,6 @@
     }
   },
   "exempt": {
-    "src/server/move.ts#nameTaken": {
-      "kind": "row",
-      "reason": "Le déplacement a relu le site dans l'espace de l'appelant (loadHome) avant d'en demander le plan, et seul son condensé de nom est comparé à ceux de la cible."
-    },
     "src/server/repo.ts#breakdown": {
       "kind": "bounded",
       "reason": "Le site vient d'être relu, de l'espace de l'appelant ou par un partage (loadSite) : la requête se borne à son site_id, seule la colonne jointe est calculée."

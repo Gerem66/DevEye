@@ -22,14 +22,14 @@ import {
     type AudienceSubmission,
     type AudienceSubmissionRow
 } from '../contracts/domain';
-import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
+import { defineSdkFeature, FeatureError, type ItemDigestKeys, type SdkCipher } from '@deveye/types/sdk/server';
 
-import { countAnswers, expireAnswers, kindsOf, type KindOf } from './answers';
+import { countAnswers, expireAnswers, kindsOf, type AnswerScope, type KindOf } from './answers';
+import { formNameRef } from './refs';
 import {
     ingestOf,
     loadHomeSite,
     loadSite,
-    nameRef,
     readJson,
     readLabel,
     siteCipher,
@@ -130,7 +130,7 @@ export const audienceFormListFeature = defineSdkFeature({
  * DevEye passent tous deux par ici.
  */
 export async function createFormRecord(
-    { repo, cipher }: { repo: AudienceFormsRepo; cipher: SdkCipher },
+    { repo, cipher, keys }: { repo: AudienceFormsRepo; cipher: SdkCipher; keys: ItemDigestKeys },
     siteId: number,
     input: { name: string; mode: AudienceFormMode; fields: readonly AudienceFormField[] }
 ): Promise<number> {
@@ -138,7 +138,7 @@ export async function createFormRecord(
     if (count >= AUDIENCE_MAX_FORMS) {
         throw new FeatureError('validation', `Un site ne peut pas porter plus de ${AUDIENCE_MAX_FORMS} formulaires.`);
     }
-    const ref = nameRef(input.name);
+    const ref = formNameRef(keys, siteId, input.name);
     if (await repo.findFormByName(siteId, ref)) {
         throw new FeatureError('validation', 'Un formulaire porte déjà ce nom sur ce site.');
     }
@@ -173,7 +173,7 @@ export const audienceFormAddFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const site = await loadHomeSite(ctx, input.siteId);
         const cipher = ctx.cipher();
-        const id = await createFormRecord({ repo: ctx.repo, cipher }, input.siteId, input);
+        const id = await createFormRecord({ repo: ctx.repo, cipher, keys: ctx.keys }, input.siteId, input);
         ctx.audit({
             action: 'audience.formAdd',
             description: `Formulaire de retours « ${input.name.trim()} » déclaré`,
@@ -192,7 +192,7 @@ export const audienceFormUpdateFeature = defineSdkFeature({
     access: { level: 'write', item: siteOfForm },
     handler: async (ctx: Ctx, input) => {
         const form = await loadHomeForm(ctx, input.formId);
-        const ref = nameRef(input.name);
+        const ref = formNameRef(ctx.keys, Number(form.site_id), input.name);
         const clash = await ctx.repo.findFormByName(Number(form.site_id), ref);
         if (clash && Number(clash.id) !== Number(form.id)) {
             throw new FeatureError('validation', 'Un formulaire porte déjà ce nom sur ce site.');
@@ -314,7 +314,7 @@ export async function formKinds(
  * que ce retour portait. `false` : la ligne était déjà partie.
  */
 export async function forgetSubmission(
-    scope: { repo: AudienceFormsRepo; cipher: SdkCipher },
+    scope: AnswerScope,
     row: Pick<AudienceSubmissionRow, 'id' | 'form_id' | 'content'>,
     expired: { kindOf: KindOf } | null = null
 ): Promise<boolean> {
@@ -327,9 +327,9 @@ export async function forgetSubmission(
     // recalcule).
     if (!(await repo.removeSubmission(Number(row.id)))) return false;
     if (expired) {
-        if (stored?.fields) await expireAnswers(repo, formId, stored.fields, expired.kindOf);
+        if (stored?.fields) await expireAnswers(scope, formId, stored.fields, expired.kindOf);
     } else {
-        if (stored?.fields) await countAnswers(repo, cipher, formId, stored.fields, -1);
+        if (stored?.fields) await countAnswers(scope, formId, stored.fields, -1);
         await repo.bumpFormReceived(formId, -1);
     }
     await repo.bumpFormSubmissions(formId, -1);
@@ -344,7 +344,8 @@ export const audienceSubmissionRemoveFeature = defineSdkFeature({
         const row = await ctx.repo.findSubmission(input.submissionId);
         if (!row) throw new FeatureError('not_found', 'Retour introuvable');
         await loadHomeSite(ctx, Number(row.site_id));
-        if (await forgetSubmission({ repo: ctx.repo, cipher: ctx.cipher() }, row)) ingestOf()?.invalidate();
+        const scope = { repo: ctx.repo, cipher: ctx.cipher(), keys: ctx.keys, siteId: Number(row.site_id) };
+        if (await forgetSubmission(scope, row)) ingestOf()?.invalidate();
         return { ok: true as const };
     }
 });

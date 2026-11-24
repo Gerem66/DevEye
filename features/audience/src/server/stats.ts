@@ -8,7 +8,8 @@ import {
 import { AUDIENCE_BREAKDOWN_DEFAULT, AUDIENCE_BREAKDOWN_MAX, type AudienceBreakdownItem } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
-import { dayBounds, dayKey, labelRef } from './normalize';
+import { dayBounds, dayKey } from './normalize';
+import { labelRef } from './refs';
 import type { AudienceBreakdownRow, ResolvedStep } from './repo';
 import {
     loadSite,
@@ -59,7 +60,10 @@ export const audienceOverviewFeature = defineSdkFeature({
         // libellés, retrouvés par condensé sans rien déchiffrer. Un chemin jamais
         // mesuré n'a pas de libellé et n'exclut rien.
         const body = await readJson<Partial<StoredSite>>(await siteCipher(ctx, input.siteId), site.content);
-        const transit = (body?.transitPaths ?? []).map((path) => ({ kind: 'path', labelRef: labelRef(path) }));
+        const transit = (body?.transitPaths ?? []).map((path) => ({
+            kind: 'path',
+            labelRef: labelRef(ctx.keys, input.siteId, path)
+        }));
         const labelIds = await ctx.repo.resolveLabels(input.siteId, transit);
         const transitPathIds = transit
             .map((ref) => labelIds.get(`path:${ref.labelRef}`))

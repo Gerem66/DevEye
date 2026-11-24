@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 
 import {
     AUDIENCE_ORIGIN_ANY,
@@ -60,15 +60,6 @@ export function setIngest(ingest: AudienceIngest | null): void {
  */
 export function ingestOf(): AudienceIngest | null {
     return ingestRef;
-}
-
-/**
- * L'identité d'un site dans l'espace : le chiffrement étant non déterministe,
- * `content` ne peut porter aucune contrainte d'unicité (deux chiffrés de
- * « Vitrine » diffèrent), ce condensé la porte à sa place.
- */
-export function nameRef(name: string): string {
-    return createHash('sha256').update(name.trim().toLowerCase()).digest('hex').slice(0, 16);
 }
 
 /**

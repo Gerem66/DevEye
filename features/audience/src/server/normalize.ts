@@ -12,14 +12,6 @@ import { AUDIENCE_LABEL_MAX_LENGTH, AUDIENCE_ORIGIN_ANY, type AudiencePlatform }
  */
 
 /**
- * L'identité d'un libellé, ce que `content` chiffré ne peut pas porter : 16
- * caractères du sha256, collision hors de portée pratique et index court.
- */
-export function labelRef(value: string): string {
-    return createHash('sha256').update(value).digest('hex').slice(0, 16);
-}
-
-/**
  * Le chemin d'une page, ou le nom d'un écran.
  *
  * La requête et l'ancre sont retirées : les garder ferait de chaque

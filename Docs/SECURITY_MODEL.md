@@ -918,8 +918,10 @@ ratée sur un compte inconnu (`usernameRef` au journal d'audit, où l'on tape
 parfois son mot de passe par erreur), le nom d'une base de données
 (`database_connections.name_ref`, lié à l'espace) et ceux de Git : le dépôt
 (`slug_ref`, lié à l'espace), ses branches, ses tags et ses auteurs (liés au
-dépôt). Les condensés d'Audience, des Liens courts, des Stores et du module
-Audit sont encore des SHA-256 nus.
+dépôt), et ceux d'Audience : le nom d'un site (lié à l'espace), celui d'un
+entonnoir et d'un formulaire, les libellés mesurés et les réponses comptées
+(liés au site). Les condensés des Liens courts, des Stores et du module Audit
+sont encore des SHA-256 nus.
 
 Un condensé lié à un espace ne le quitte pas : une copie arrive avec ceux de
 sa destination, un déplacement les recalcule. Les lignes écrites sous l'ancien

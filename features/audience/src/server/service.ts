@@ -22,12 +22,13 @@ import {
     type SdkCipher
 } from '@deveye/types/sdk/server';
 
-import { dayBounds, dayKey, labelRef, monthKey, normalizePath, originAllowed, persistentVisitorRef } from './normalize';
+import { dayBounds, dayKey, monthKey, normalizePath, originAllowed, persistentVisitorRef } from './normalize';
+import { formNameRef, labelRef } from './refs';
 import { countAnswers, kindsOf, type KindOf } from './answers';
 import { forgetSubmission, formKinds } from './forms';
 import type { AudienceMaintenanceRow, AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
-import { nameRef, parseOrigins, readJson } from './_shared';
+import { parseOrigins, readJson } from './_shared';
 
 /** Le navigateur ou le système qu'aucune règle ne reconnaît : le libellé que les statistiques gardent. */
 const UNKNOWN_LABEL = 'Autre';
@@ -447,7 +448,8 @@ export class AudienceIngest {
             // renverrait, et le même message serait stocké deux fois pendant que
             // les compteurs, eux, ne compteraient qu'une fois et demie.
             try {
-                await countAnswers(this.deps.repo, cipher, form.id, fields, 1, kindsOf(form.fields));
+                const scope = { repo: this.deps.repo, cipher, keys: this.deps.keys, siteId: site.id };
+                await countAnswers(scope, form.id, fields, 1, kindsOf(form.fields));
                 await this.deps.repo.touchForm(form.id, now);
                 form.submissions++;
                 await this.banIfFlooding(site, ip, now);
@@ -541,7 +543,7 @@ export class AudienceIngest {
      */
     private async resolveForm(site: CachedSite, name: string, cipher: SdkCipher): Promise<CachedForm | null> {
         const trimmed = name.trim();
-        const ref = nameRef(trimmed);
+        const ref = formNameRef(this.deps.keys, site.id, trimmed);
         const cacheKey = `${site.id}:${ref}`;
         const cached = this.forms.get(cacheKey);
         if (cached) return cached;
@@ -750,7 +752,7 @@ export class AudienceIngest {
      * visite ferait un aller-retour SQL et un chiffrement par dimension.
      */
     private async resolveLabel(siteId: number, kind: string, value: string, cipher: SdkCipher): Promise<number> {
-        const ref = labelRef(value);
+        const ref = labelRef(this.deps.keys, siteId, value);
         const cacheKey = `${siteId}:${kind}:${ref}`;
         const hit = this.labels.get(cacheKey);
         if (hit !== undefined) return hit;
@@ -977,7 +979,12 @@ export class AudienceIngest {
      */
     private async expireSubmissions(site: AudienceMaintenanceRow, now: number): Promise<void> {
         const before = now - site.submission_retention_days * 86400;
-        const scope = { repo: this.deps.repo, cipher: this.deps.cipherFor(site.workspace_id) };
+        const scope = {
+            repo: this.deps.repo,
+            cipher: this.deps.cipherFor(site.workspace_id),
+            keys: this.deps.keys,
+            siteId: Number(site.id)
+        };
         // Un schéma relu par formulaire, pas par retour : un lot en compte souvent cent du même.
         const kinds = new Map<number, Promise<KindOf>>();
         const kindsFor = (formId: number): Promise<KindOf> => {

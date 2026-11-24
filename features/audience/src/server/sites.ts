@@ -1,10 +1,11 @@
 import type { z } from 'zod';
-import { FeatureError, type SdkCipher, type SdkQuota } from '@deveye/types/sdk/server';
+import { FeatureError, type ItemDigestKeys, type SdkCipher, type SdkQuota } from '@deveye/types/sdk/server';
 
 import type { audienceSiteAdd } from '../contracts/commands';
 import type { AudienceSiteRow } from '../contracts/domain';
 import type { AudienceRepo } from './repo';
-import { generatePublicKey, ingestOf, nameRef, packOrigins, packTransitPaths, type StoredSite } from './_shared';
+import { siteNameRef } from './refs';
+import { generatePublicKey, ingestOf, packOrigins, packTransitPaths, type StoredSite } from './_shared';
 
 export type SiteBody = z.infer<typeof audienceSiteAdd.input>;
 
@@ -14,11 +15,11 @@ export type SiteBody = z.infer<typeof audienceSiteAdd.input>;
  * d'usage de DevEye passent tous deux par ici.
  */
 export async function createSiteRecord(
-    { repo, cipher, quota }: { repo: AudienceRepo; cipher: SdkCipher; quota: SdkQuota },
+    { repo, cipher, quota, keys }: { repo: AudienceRepo; cipher: SdkCipher; quota: SdkQuota; keys: ItemDigestKeys },
     workspaceId: number,
     input: SiteBody
 ): Promise<AudienceSiteRow> {
-    const ref = nameRef(input.name);
+    const ref = siteNameRef(keys, workspaceId, input.name);
     if (await repo.findByName(workspaceId, ref)) {
         throw new FeatureError('validation', 'Un site porte déjà ce nom dans cet espace.');
     }

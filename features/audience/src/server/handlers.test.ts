@@ -25,10 +25,14 @@ import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { audienceHandlers } from './handlers';
 import { serverEntry } from './index';
-import { dayKey, labelRef } from './normalize';
+import { dayKey } from './normalize';
+import { labelRef } from './refs';
 import type { AudienceRepo, AudienceSiteWithStatsRow } from './repo';
 import type { AudienceIngest } from './service';
 import { setIngest } from './_shared';
+
+/** Le condensé d'un libellé du site 1, sous les clés du harnais : celui que les handlers calculent. */
+const refOf = (value: string): string => labelRef(createTestContext().keys, 1, value);
 
 /**
  * Les handlers du module, sur le harnais du SDK. On tient ce qui ne lève nulle
@@ -234,7 +238,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         resolveLabels: async (_siteId, refs) =>
             new Map(
                 refs
-                    .filter((r) => r.labelRef === labelRef('/tarifs') || r.labelRef === labelRef('devis'))
+                    .filter((r) => r.labelRef === refOf('/tarifs') || r.labelRef === refOf('devis'))
                     .map((r, i) => [`${r.kind}:${r.labelRef}`, i + 1])
             ),
         retention: async (_siteId, resolved) => resolved.map((s, i) => (s.labelId === null ? 0 : 10 - i * 6)),
@@ -640,7 +644,7 @@ describe('les entonnoirs', () => {
         // `/tarifs/` est rangé `/tarifs`, comme l'ingestion l'aurait fait :
         // c'est ce qui permet à la marche de retrouver son libellé.
         assert.deepEqual(
-            repo.steps.map((s) => [s.position, s.match_kind, s.content, s.label_ref === labelRef(s.content)]),
+            repo.steps.map((s) => [s.position, s.match_kind, s.content, s.label_ref === refOf(s.content)]),
             [
                 [0, 'path', '/tarifs', true],
                 [1, 'event', 'devis', true],

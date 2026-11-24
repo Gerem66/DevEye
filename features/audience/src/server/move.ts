@@ -1,10 +1,11 @@
 import {
     countMovableCells,
     FeatureError,
+    itemDigestTaken,
     movableCellsOf,
+    rekeyItemDigests,
     resealCells,
-    type FeatureItemsMove,
-    type SdkQueryable
+    type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
 import type { AudienceRepo } from './repo';
@@ -25,28 +26,27 @@ import { ingestOf } from './_shared';
  */
 const CELLS = movableCellsOf(audienceTree);
 
-/** Le nom est unique par espace (`uniq_audience_site_name`), par condensé. */
-async function nameTaken(q: SdkQueryable, siteId: number, toWorkspaceId: number): Promise<boolean> {
-    const rows = await q.query<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM audience_sites
-          WHERE workspace_id = ? AND name_ref = (SELECT name_ref FROM audience_sites WHERE id = ?)`,
-        [toWorkspaceId, siteId]
-    );
-    return Number(rows[0]?.n ?? 0) > 0;
-}
-
 export const audienceMove: FeatureItemsMove<AudienceRepo> = {
-    async plan({ q, itemId, toWorkspaceId }) {
+    async plan({ q, itemId, toWorkspaceId, cipher, keys }) {
         const siteId = Number(itemId);
-        const blockers = (await nameTaken(q, siteId, toWorkspaceId))
-            ? ['Un site du même nom existe déjà dans cet espace.']
-            : [];
+        // Le nom est unique par espace (`uniq_audience_site_name`), par un condensé
+        // lié à l'espace : celui de l'arrivée se calcule avant d'écrire quoi que ce soit.
+        const taken = await itemDigestTaken(q, audienceTree, siteId, { cipher, keys, workspaceId: toWorkspaceId });
+        const blockers = taken ? ['Un site du même nom existe déjà dans cet espace.'] : [];
         return { blockers, drops: [], rows: await countMovableCells(q, CELLS, siteId) };
     },
 
-    async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers }) {
+    async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers, keys }) {
         const siteId = Number(itemId);
         await resealCells(q, CELLS, siteId, ciphers);
+        // Seul le nom du site dépend de l'espace : les condensés liés au site le suivent tels quels.
+        await rekeyItemDigests(
+            q,
+            audienceTree,
+            siteId,
+            { cipher: ciphers.to, keys, workspaceId: toWorkspaceId },
+            { within: 'workspace' }
+        );
         const next = await q.query<{ next: number }>(
             'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM audience_sites WHERE workspace_id = ?',
             [toWorkspaceId]

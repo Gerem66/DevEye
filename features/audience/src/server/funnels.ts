@@ -12,9 +12,10 @@ import {
 } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
-import { labelRef, normalizePath } from './normalize';
+import { normalizePath } from './normalize';
+import { funnelNameRef, labelRef } from './refs';
 import type { ResolvedStep } from './repo';
-import { loadHomeSite, loadSite, nameRef, rangeWindow, readLabel, siteCipher, siteOfFunnel, type Ctx } from './_shared';
+import { loadHomeSite, loadSite, rangeWindow, readLabel, siteCipher, siteOfFunnel, type Ctx } from './_shared';
 
 /**
  * Les entonnoirs d'un site : où les gens décrochent.
@@ -38,11 +39,18 @@ function stepValue(kind: AudienceFunnelStepKind, raw: string): string {
 }
 
 async function toStoredStep(
+    ctx: Ctx,
     cipher: SdkCipher,
+    siteId: number,
     step: AudienceFunnelStepDraft
 ): Promise<{ kind: string; labelRef: string; content: string; value: string }> {
     const value = stepValue(step.kind, step.value);
-    return { kind: step.kind, labelRef: labelRef(value), content: await cipher.encrypt(value), value };
+    return {
+        kind: step.kind,
+        labelRef: labelRef(ctx.keys, siteId, value),
+        content: await cipher.encrypt(value),
+        value
+    };
 }
 
 /**
@@ -120,7 +128,7 @@ export const audienceFunnelAddFeature = defineSdkFeature({
                 `Un site ne peut pas porter plus de ${AUDIENCE_MAX_FUNNELS} entonnoirs.`
             );
         }
-        const ref = nameRef(input.name);
+        const ref = funnelNameRef(ctx.keys, input.siteId, input.name);
         if (await ctx.repo.findFunnelByName(input.siteId, ref)) {
             throw new FeatureError('validation', 'Un entonnoir porte déjà ce nom sur ce site.');
         }
@@ -134,7 +142,7 @@ export const audienceFunnelAddFeature = defineSdkFeature({
         await ctx.repo.replaceFunnelSteps(
             funnelId,
             input.siteId,
-            await Promise.all(input.steps.map((step) => toStoredStep(cipher, step)))
+            await Promise.all(input.steps.map((step) => toStoredStep(ctx, cipher, input.siteId, step)))
         );
         ctx.audit({ action: 'audience.funnelAdd', description: `Entonnoir « ${input.name.trim()} » défini` });
         return { funnelId };
@@ -147,7 +155,7 @@ export const audienceFunnelUpdateFeature = defineSdkFeature({
     access: { level: 'write', item: siteOfFunnel },
     handler: async (ctx: Ctx, input) => {
         const funnel = await loadFunnel(ctx, input.funnelId);
-        const ref = nameRef(input.name);
+        const ref = funnelNameRef(ctx.keys, Number(funnel.site_id), input.name);
         const clash = await ctx.repo.findFunnelByName(funnel.site_id, ref);
         if (clash && clash.id !== funnel.id) {
             throw new FeatureError('validation', 'Un entonnoir porte déjà ce nom sur ce site.');
@@ -158,7 +166,7 @@ export const audienceFunnelUpdateFeature = defineSdkFeature({
         await ctx.repo.replaceFunnelSteps(
             funnel.id,
             funnel.site_id,
-            await Promise.all(input.steps.map((step) => toStoredStep(cipher, step)))
+            await Promise.all(input.steps.map((step) => toStoredStep(ctx, cipher, Number(funnel.site_id), step)))
         );
         return { ok: true as const };
     }

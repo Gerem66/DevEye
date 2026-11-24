@@ -7,9 +7,9 @@ import {
     type AudienceFieldValue,
     type AudienceFormField
 } from '../contracts/domain';
-import type { SdkCipher } from '@deveye/types/sdk/server';
+import type { ItemDigestKeys, SdkCipher } from '@deveye/types/sdk/server';
 
-import { labelRef } from './normalize';
+import { formLabelRef } from './refs';
 import type { AudienceFormsRepo } from './repoForms';
 
 /**
@@ -30,6 +30,14 @@ export type KindOf = (field: string) => AudienceFieldKind | null;
 
 /** Les types dont une valeur est une statistique, jamais une donnée de personne. */
 const STATISTICAL_KINDS: ReadonlySet<AudienceFieldKind> = new Set(['choice', 'boolean', 'number']);
+
+/** De quoi compter les réponses d'un site : son dépôt, son chiffre, et ce qui condense ses libellés. */
+export interface AnswerScope {
+    repo: AudienceFormsRepo;
+    cipher: SdkCipher;
+    keys: ItemDigestKeys;
+    siteId: number;
+}
 
 /** Le lecteur de types d'un schéma déclaré ; vide, chaque question est inconnue. */
 export function kindsOf(fields: readonly AudienceFormField[]): KindOf {
@@ -107,8 +115,7 @@ export function indexableAnswers(fields: Record<string, AudienceFieldValue>, kin
  * seau, et une valeur retombée à zéro part avec son libellé.
  */
 export async function countAnswers(
-    repo: AudienceFormsRepo,
-    cipher: SdkCipher,
+    { repo, cipher, keys, siteId }: AnswerScope,
     formId: number,
     fields: Record<string, AudienceFieldValue>,
     delta: 1 | -1,
@@ -123,7 +130,7 @@ export async function countAnswers(
             // En décrémentation on ne crée rien : le libellé d'une question vidée
             // entre-temps n'a pas à renaître pour qu'on retire un compte qui
             // n'existe plus. Absent, il n'y a simplement rien à défaire.
-            const ref = labelRef(answer.field);
+            const ref = formLabelRef(keys, siteId, answer.field);
             let found = await repo.findFormLabel(formId, 'field', ref);
             if (found === null && delta > 0) {
                 // Le nombre de questions n'était borné que sur un formulaire
@@ -141,7 +148,7 @@ export async function countAnswers(
         // 0 = le seau « texte libre ».
         let valueId = 0;
         if (answer.value !== null) {
-            const ref = labelRef(answer.value);
+            const ref = formLabelRef(keys, siteId, answer.value);
             const known = await repo.findFormLabel(formId, 'value', ref);
             if (known !== null) {
                 valueId = known;
@@ -165,7 +172,7 @@ export async function countAnswers(
  * au seau « texte libre », et son libellé part quand plus rien ne la cite.
  */
 export async function expireAnswers(
-    repo: AudienceFormsRepo,
+    { repo, keys, siteId }: Pick<AnswerScope, 'repo' | 'keys' | 'siteId'>,
     formId: number,
     fields: Record<string, AudienceFieldValue>,
     kindOf: KindOf
@@ -175,8 +182,8 @@ export async function expireAnswers(
         const kind = kindOf(answer.field);
         if (kind !== null && STATISTICAL_KINDS.has(kind)) continue;
         const [fieldId, valueId] = await Promise.all([
-            repo.findFormLabel(formId, 'field', labelRef(answer.field)),
-            repo.findFormLabel(formId, 'value', labelRef(answer.value))
+            repo.findFormLabel(formId, 'field', formLabelRef(keys, siteId, answer.field)),
+            repo.findFormLabel(formId, 'value', formLabelRef(keys, siteId, answer.value))
         ]);
         // Sans libellé, la réponse a été comptée au seau : elle y reste.
         if (fieldId === null || valueId === null) continue;

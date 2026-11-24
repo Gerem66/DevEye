@@ -1,5 +1,6 @@
 import type { FeatureItemsCopy, ItemTree } from '@deveye/types/sdk/server';
 
+import { FORM_LABEL_DIGEST, FORM_NAME_DIGEST, FUNNEL_NAME_DIGEST, LABEL_DIGEST, SITE_NAME_DIGEST } from './refs';
 import type { AudienceRepo } from './repo';
 import { generatePublicKey } from './_shared';
 
@@ -21,17 +22,28 @@ export const audienceTree: ItemTree = [
         ownerColumn: 'id',
         workspaceColumn: 'workspace_id',
         orderColumn: 'sort_order',
+        // Le nom est unique par espace, par un condensé lié à cet espace : il ne
+        // voyage pas, la destination calcule le sien.
         unique: { column: 'name_ref', message: 'Un site du même nom existe déjà dans cet espace.' },
+        digests: [SITE_NAME_DIGEST],
         sealed: ['content'],
         omit: ['last_event_at', 'created']
     },
-    { table: 'audience_funnels', idColumn: 'id', ownerColumn: 'site_id', sealed: ['content'], omit: ['created'] },
+    {
+        table: 'audience_funnels',
+        idColumn: 'id',
+        ownerColumn: 'site_id',
+        sealed: ['content'],
+        digests: [FUNNEL_NAME_DIGEST],
+        omit: ['created']
+    },
     {
         table: 'audience_funnel_steps',
         idColumn: 'id',
         ownerColumn: 'site_id',
         refs: { funnel_id: 'audience_funnels' },
-        sealed: ['content']
+        sealed: ['content'],
+        digests: [LABEL_DIGEST]
     },
     {
         table: 'ft_audience_forms',
@@ -41,12 +53,20 @@ export const audienceTree: ItemTree = [
         // `sealed`, un déplacement les laisse sous l'ancienne clé et le formulaire
         // strict refuse alors tout envoi, sans rien signaler.
         sealed: ['content', 'form_schema'],
+        digests: [FORM_NAME_DIGEST],
         // Ce que le formulaire a reçu reste avec les réponses, là où elles sont.
         omit: ['submissions', 'received', 'last_at', 'created']
     },
     // Ce que la collecte a amassé ne se copie pas : la copie est un autre site,
     // qui aura ses propres visiteurs.
-    { table: 'audience_labels', idColumn: 'id', ownerColumn: 'site_id', sealed: ['content'], cache: true },
+    {
+        table: 'audience_labels',
+        idColumn: 'id',
+        ownerColumn: 'site_id',
+        sealed: ['content'],
+        digests: [LABEL_DIGEST],
+        cache: true
+    },
     { table: 'ft_audience_submissions', idColumn: 'id', ownerColumn: 'site_id', sealed: ['content'], cache: true },
     // Les libellés d'un formulaire pendent au formulaire et non au site : c'est le
     // seul niveau où le propriétaire n'est pas la colonne `site_id`.
@@ -56,6 +76,7 @@ export const audienceTree: ItemTree = [
         ownerColumn: 'form_id',
         ownerScope: 'SELECT id FROM ft_audience_forms WHERE site_id = ?',
         sealed: ['content'],
+        digests: [FORM_LABEL_DIGEST],
         cache: true
     }
 ];

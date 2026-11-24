@@ -22,11 +22,14 @@ import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { audienceHandlers } from './handlers';
 import { manifest } from '../manifest';
-import { labelRef } from './normalize';
+import { formLabelRef } from './refs';
 import type { AudienceRepo } from './repo';
 import type { AudienceSubmissionWithContextRow } from './repoForms';
 import type { AudienceIngest } from './service';
 import { setIngest } from './_shared';
+
+/** Le condensé d'une question ou d'une valeur du site 1, sous les clés du harnais. */
+const refOf = (value: string): string => formLabelRef(createTestContext().keys, 1, value);
 
 /**
  * Les commandes des retours, sur le harnais du SDK. On tient ce qui ne lève
@@ -353,9 +356,9 @@ async function seeded(projections: Record<number, number[]> = {}): Promise<FakeR
             content: seal({ recommande: 'non' }, '/b')
         }
     );
-    const field = await repo.resolveFormLabel(10, 'field', labelRef('recommande'), 'recommande');
-    const oui = await repo.resolveFormLabel(10, 'value', labelRef('oui'), 'oui');
-    const non = await repo.resolveFormLabel(10, 'value', labelRef('non'), 'non');
+    const field = await repo.resolveFormLabel(10, 'field', refOf('recommande'), 'recommande');
+    const oui = await repo.resolveFormLabel(10, 'value', refOf('oui'), 'oui');
+    const non = await repo.resolveFormLabel(10, 'value', refOf('non'), 'non');
     await repo.bumpAnswer(10, field, oui, 1);
     await repo.bumpAnswer(10, field, non, 1);
     return repo;
@@ -459,7 +462,7 @@ describe('audience.results', () => {
     it('regroupe par question, sépare le seau du texte libre', async () => {
         const repo = await seeded();
         // Une seconde question, entièrement en texte libre.
-        const message = await repo.resolveFormLabel(10, 'field', labelRef('message'), 'message');
+        const message = await repo.resolveFormLabel(10, 'field', refOf('message'), 'message');
         await repo.bumpAnswer(10, message, 0, 2);
         const ctx = createTestContext({ repo, workspaceId: 1 });
 

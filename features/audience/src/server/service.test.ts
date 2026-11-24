@@ -14,7 +14,7 @@ import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { countAnswers } from './answers';
 import { dayKey, monthKey } from './normalize';
-import { nameRef } from './_shared';
+import { formNameRef } from './refs';
 import { serverEntry } from './index';
 import type { AudienceRepo, NewSessionInput, PendingEventRow } from './repo';
 import { AudienceIngest, type IngestRequest, type SubmitRequest } from './service';
@@ -621,7 +621,7 @@ function declared(fields: AudienceFormField[], over: Partial<AudienceFormRow> = 
     return {
         id: 10,
         site_id: 1,
-        name_ref: nameRef('contact'),
+        name_ref: formNameRef(createTestServiceDeps().keys, 1, 'contact'),
         mode: 'strict',
         form_schema: JSON.stringify({ fields }),
         is_open: 1,
@@ -728,7 +728,8 @@ describe('AudienceIngest : les retours', () => {
         await ingest.submit(submission({ fields: { recommande: 'oui' } }));
         await ingest.submit(submission({ fields: { recommande: 'non' } }));
 
-        await countAnswers(repo, deps.cipherFor(1), repo.forms[0].id, { recommande: 'oui' }, -1);
+        const scope = { repo, cipher: deps.cipherFor(1), keys: deps.keys, siteId: 1 };
+        await countAnswers(scope, repo.forms[0].id, { recommande: 'oui' }, -1);
 
         // Un seul des deux comptes bouge ; retombé à zéro, il part avec son libellé.
         assert.deepEqual([...repo.answers.values()], [1]);
