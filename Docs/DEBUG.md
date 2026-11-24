@@ -65,7 +65,9 @@ Dans un module : une entrée `e2e` de son `FeatureServer`, un scénario
 lèvent pour échouer. `external` nomme le tiers sans lequel il ne peut pas
 réussir (GitHub, Stripe) : la page l'affiche, la CI le laisse de côté.
 `moderator` ouvre le compte jetable en modérateur de l'instance, ce qu'il faut
-pour envoyer une commande déclarée `moderation: true`. Le
+pour envoyer une commande déclarée `moderation: true`. Une étape est arrêtée
+au bout de 20 s, ou de son `timeoutMs` ; un parcours au bout de deux minutes,
+allongées de ce que ses étapes demandent au-delà de ces 20 s. Le
 contexte (`SdkE2eContext`) donne un compte jetable connecté, `send` par sa
 socket, `fetch` vers une route publique, `waitFor`, et `defer`, à appeler
 juste après avoir créé quelque chose, avant ce qui peut échouer. `fetch` rend

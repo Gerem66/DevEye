@@ -6,14 +6,14 @@ import { createMailbox } from './mailbox';
 
 function harness() {
     const delivered: MailMessage[] = [];
-    const warnings: string[] = [];
+    const notes: string[] = [];
     const inner: Mailer = {
         configured: true,
         send: async (m) => void delivered.push(m),
         verify: async () => undefined
     };
-    const box = createMailbox({ warn: (_o: object, msg: string) => void warnings.push(msg) } as never);
-    return { box, mailer: box.tap(inner), delivered, warnings };
+    const box = createMailbox({ info: (_o: object, msg: string) => void notes.push(msg) } as never);
+    return { box, mailer: box.tap(inner), delivered, notes };
 }
 
 const mail = (to: string, subject = 'Sujet'): MailMessage => ({ to, subject, text: 't', html: 'h' });
@@ -29,7 +29,7 @@ describe('la boîte des essais', () => {
             h.delivered.map((m) => m.to),
             ['alice@exemple.fr']
         );
-        assert.equal(h.warnings.length, 1);
+        assert.equal(h.notes.length, 1);
         assert.equal((await h.box.next('A@e2e.deveye.invalid', 10)).to, 'a@e2e.deveye.invalid');
     });
 

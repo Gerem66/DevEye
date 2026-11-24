@@ -39,7 +39,8 @@ const entry = (id: string, external: string | null = null): DebugE2eScenario => 
     label: id,
     sourceLabel: 'DevEye',
     skip: null,
-    external
+    external,
+    budgetMs: 120_000
 });
 
 describe('e2eVerdict', () => {

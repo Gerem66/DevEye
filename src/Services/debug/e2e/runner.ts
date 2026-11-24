@@ -8,6 +8,15 @@ import type { E2eContext, E2eDeps, E2eScenario, E2eStep } from './scenario';
 
 const STEP_MS = 20_000;
 const SCENARIO_MS = 120_000;
+
+/**
+ * Le temps au bout duquel un parcours est arrêté : deux minutes, allongées de
+ * ce que ses étapes demandent au-delà du délai ordinaire. Une étape qui attend
+ * un tiers cinq minutes ne doit pas être coupée par le plafond de son parcours.
+ */
+export function scenarioBudgetMs(scenario: Pick<E2eScenario, 'steps'>): number {
+    return scenario.steps.reduce((ms, step) => ms + Math.max(0, (step.timeoutMs ?? STEP_MS) - STEP_MS), SCENARIO_MS);
+}
 const DETAIL_MAX = 300;
 
 export interface RunnerEnv {
@@ -86,7 +95,7 @@ export async function runScenario(
     env: RunnerEnv,
     runSignal: AbortSignal
 ): Promise<boolean> {
-    const signal = AbortSignal.any([runSignal, AbortSignal.timeout(SCENARIO_MS)]);
+    const signal = AbortSignal.any([runSignal, AbortSignal.timeout(scenarioBudgetMs(scenario))]);
     const ledger = createLedger();
     const ctx: E2eContext = {
         deps: env.deps,

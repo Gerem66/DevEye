@@ -32,8 +32,7 @@ import { startTestServer, type TestServer } from './lib/test-server';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const USERNAME = process.env.SMOKE_USERNAME ?? 'dev';
 const PASSWORD = process.env.SMOKE_PASSWORD ?? 'devdevdev';
-/** Le serveur arrête un parcours à deux minutes : au-delà, c'est l'essai qui ne répond plus. */
-const SCENARIO_BUDGET_MS = 130_000;
+/** Au-delà du temps que le serveur laisse à ses parcours : le ménage, puis c'est l'essai qui ne répond plus. */
 const RUN_MARGIN_MS = 60_000;
 
 const args = process.argv.slice(2);
@@ -78,9 +77,9 @@ async function signIn(base: string): Promise<TestClient> {
 }
 
 /** Suit un essai jusqu'à sa fin, en imprimant chaque parcours dès qu'il a son sort. */
-async function follow(browser: TestClient, runId: number, count: number): Promise<DebugRun> {
+async function follow(browser: TestClient, runId: number, budgetMs: number): Promise<DebugRun> {
     const printed = new Set<string>();
-    const deadline = Date.now() + count * SCENARIO_BUDGET_MS + RUN_MARGIN_MS;
+    const deadline = Date.now() + budgetMs + RUN_MARGIN_MS;
     for (;;) {
         const run = await browser.send<DebugRun>('debug.runGet', { runId });
         if (run.report.kind === 'e2e') {
@@ -128,10 +127,17 @@ async function main(): Promise<void> {
         console.log(`  laissés de côté, ils dépendent d'un tiers (--external les lance) : ${names}`);
     }
 
+    const budgets = new Map(catalog.scenarios.map((s) => [s.id, s.budgetMs]));
     const runs: DebugRun[] = [];
     for (const batch of batchesOf(picked.ids)) {
         const { runId } = await client.send<{ runId: number }>('debug.e2eStart', { scenarios: batch });
-        runs.push(await follow(client, runId, batch.length));
+        runs.push(
+            await follow(
+                client,
+                runId,
+                batch.reduce((ms, id) => ms + (budgets.get(id) ?? 0), 0)
+            )
+        );
     }
 
     const { problems } = e2eVerdict(runs, expectedSkips);
@@ -149,8 +155,9 @@ async function main(): Promise<void> {
     }
     const scenarios = runs.flatMap((r) => (r.report.kind === 'e2e' ? r.report.scenarios : []));
     const skipped = scenarios.filter((s) => s.status === 'skipped').length;
+    const passed = scenarios.length - skipped;
     console.log(
-        `\n✓ e2e : ${scenarios.length - skipped} parcours réussis` +
+        `\n✓ e2e : ${passed} parcours ${passed > 1 ? 'réussis' : 'réussi'}` +
             (skipped > 0 ? `, ${skipped} ignoré(s) comme attendu` : '') +
             ', aucun compte d’essai restant.'
     );

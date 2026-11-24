@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { pendingReport, runScenario, type RunnerEnv } from './runner';
+import { pendingReport, runScenario, scenarioBudgetMs, type RunnerEnv } from './runner';
 import type { E2eDeps, E2eScenario } from './scenario';
 
 const env: RunnerEnv = {
@@ -20,6 +20,19 @@ const scenario = (steps: E2eScenario['steps'], skip?: E2eScenario['skip']): E2eS
     accounts: 0,
     skip,
     steps
+});
+
+describe('le plafond d’un parcours', () => {
+    const step = (timeoutMs?: number) => ({ label: 'Étape', timeoutMs, run: async () => undefined });
+
+    it('vaut deux minutes quand aucune étape ne demande plus que le délai ordinaire', () => {
+        assert.equal(scenarioBudgetMs(scenario([step(), step(), step(15_000)])), 120_000);
+    });
+
+    it('s’allonge de ce qu’une étape longue demande en plus', () => {
+        assert.equal(scenarioBudgetMs(scenario([step(), step(330_000), step()])), 430_000);
+        assert.equal(scenarioBudgetMs(scenario([step(75_000), step(75_000)])), 230_000);
+    });
 });
 
 describe('l’exécuteur des scénarios', () => {

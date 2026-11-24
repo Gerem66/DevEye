@@ -10,7 +10,7 @@ import type { Launcher, RunRegistry } from '../runs';
 import { removerOf, type Remover } from './accounts';
 import { runGate } from './gate';
 import { newRunId, testIdentity } from './identity';
-import { pendingReport, runScenario } from './runner';
+import { pendingReport, runScenario, scenarioBudgetMs } from './runner';
 import { fromModule, type E2eDeps, type E2eScenario } from './scenario';
 import { CORE_SCENARIOS } from './scenarios';
 import { countResidue, sweepTestResidue } from './sweep';
@@ -57,7 +57,8 @@ export function createE2e(deps: E2eServiceDeps) {
                     label: sc.label,
                     sourceLabel: sc.sourceLabel,
                     skip: (await sc.skip?.(deps)) ?? null,
-                    external: sc.external ?? null
+                    external: sc.external ?? null,
+                    budgetMs: scenarioBudgetMs(sc)
                 }))
             );
             return {

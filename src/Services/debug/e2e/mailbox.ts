@@ -15,7 +15,7 @@ interface Box {
  * reçoit ses mails dans l'ordre ; les autres sont jetés. C'est aussi ce qui
  * ferme ce domaine à un inconnu : le lien d'inscription ne lui arrive jamais.
  */
-export function createMailbox(log: Pick<Logger, 'warn'>) {
+export function createMailbox(log: Pick<Logger, 'info'>) {
     const boxes = new Map<string, Box>();
     const key = (address: string): string => address.trim().toLowerCase();
 
@@ -30,7 +30,10 @@ export function createMailbox(log: Pick<Logger, 'warn'>) {
                     if (!isTestEmail(message.to)) return inner.send(message);
                     const box = boxes.get(key(message.to));
                     if (!box) {
-                        log.warn({ subject: message.subject }, 'Mail vers une adresse d’essai inattendue, jeté');
+                        log.info(
+                            { subject: message.subject },
+                            'Mail vers une adresse d’essai que personne n’attend, jeté'
+                        );
                         return;
                     }
                     const waiter = box.waiters.shift();
