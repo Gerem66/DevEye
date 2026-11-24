@@ -140,5 +140,5 @@ export const appearanceFrameSchema = appearanceSchema.extend({ boardId: boardIdS
 
 export const closedFrameSchema = z.object({
     boardId: boardIdSchema,
-    reason: z.enum(['removed', 'moved'])
+    reason: z.enum(['removed', 'moved', 'revoked'])
 });

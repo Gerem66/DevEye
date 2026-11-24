@@ -66,7 +66,7 @@ export interface SessionView {
     channel: string | null;
     /** Les autres participants. */
     peers: readonly WhiteboardPeer[];
-    closed: 'removed' | 'moved' | null;
+    closed: 'removed' | 'moved' | 'revoked' | null;
     error: ErrorNoteInput | null;
 }
 
@@ -298,7 +298,7 @@ export class BoardSession {
                 }
             } catch (e) {
                 const code = (e as { code?: string }).code;
-                if (code === 'not_found' || code === 'forbidden') this.set({ closed: 'removed' });
+                if (code === 'not_found' || code === 'forbidden') this.set({ closed: this.view.closed ?? 'removed' });
                 else this.set({ status: 'offline', error: errorNote(e, 'Le tableau n’a pas pu être ouvert.') });
             } finally {
                 this.joining = null;

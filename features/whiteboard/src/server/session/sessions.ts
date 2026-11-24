@@ -47,6 +47,11 @@ export interface SessionsDeps {
     publishTo(workspaceId: number, userIds: readonly number[], event: string, payload: unknown): void;
     /** La grille des membres se relit : date et aperçu ont bougé. */
     changed(workspaceId: number): void;
+    /**
+     * Ce compte peut-il encore suivre ce tableau depuis cet espace : toujours
+     * membre, un rôle qui le lit, et un tableau qui y est toujours visible.
+     */
+    mayFollow(boardId: number, workspaceId: number, userId: number): Promise<boolean>;
     logger: SdkLogger;
     now?(): number;
 }
@@ -60,6 +65,8 @@ const SAVE_MAX_DIRTY_MS = 15_000;
 /** Une séance vide et écrite reste ce temps en mémoire : rouvrir le tableau ne relit rien. */
 const EVICT_AFTER_MS = 5 * 60_000;
 const QUOTA_RECHECK_MS = 10 * 60_000;
+/** Un pair qui ne fait qu'écouter perd sa place au plus ce temps après avoir perdu le droit de suivre. */
+const FOLLOW_RECHECK_MS = 5_000;
 /** La grille d'un membre relit au plus une fois par minute pendant qu'on dessine. */
 const CHANGED_FLOOR_MS = 60_000;
 export const MAX_PEERS = 32;
@@ -69,6 +76,8 @@ interface Peer extends WhiteboardPeer {
     /** La salle de la connexion : un tableau projeté se suit depuis un autre espace. */
     workspaceId: number;
     seenAt: number;
+    /** La dernière fois que son droit de suivre a été relu. */
+    checkedAt: number;
 }
 
 interface Session {
@@ -153,7 +162,8 @@ export class Sessions {
             name: input.name,
             color: input.color,
             canWrite: input.canWrite,
-            seenAt: at
+            seenAt: at,
+            checkedAt: at
         });
         session.emptySince = null;
         if (at - session.quotaCheckedAt > QUOTA_RECHECK_MS) await this.checkQuota(session);
@@ -229,6 +239,23 @@ export class Sessions {
         return { seq: session.seq, accepted: winners.length, refused: null };
     }
 
+    /** Ce pair suit-il le tableau depuis un autre espace que le sien : un partage peut lui être retiré. */
+    foreign(boardId: number, clientId: string): boolean {
+        const session = this.sessions.get(boardId);
+        const peer = session?.peers.get(clientId);
+        return session !== undefined && peer !== undefined && peer.workspaceId !== session.home;
+    }
+
+    /**
+     * Relit maintenant le droit de ce pair. `false` : il ne l'a plus, sa place
+     * est fermée et son écran prévenu.
+     */
+    async recheck(boardId: number, clientId: string): Promise<boolean> {
+        const session = this.sessions.get(boardId);
+        const peer = session?.peers.get(clientId);
+        return !session || !peer || this.verify(session, clientId, peer);
+    }
+
     presence(boardId: number, clientId: string, userId: number, presence: WhiteboardPresence): void {
         const session = this.sessions.get(boardId);
         const peer = session?.peers.get(clientId);
@@ -286,6 +313,9 @@ export class Sessions {
             if (left) {
                 this.publishPeers(session);
                 if (session.peers.size === 0) session.emptySince = at;
+            }
+            for (const [clientId, peer] of [...session.peers]) {
+                if (at - peer.checkedAt > FOLLOW_RECHECK_MS) await this.verify(session, clientId, peer);
             }
             if (session.peers.size > 0 && at - session.quotaCheckedAt > QUOTA_RECHECK_MS) {
                 await this.checkQuota(session);
@@ -473,6 +503,28 @@ export class Sessions {
             this.deps.logger.error({ err: error, boardId: session.boardId }, 'whiteboard: offre illisible');
             session.overQuota = false;
         }
+    }
+
+    /** Ferme la place d'un pair qui n'a plus le droit de suivre. Une panne de la lecture ne ferme rien. */
+    private async verify(session: Session, clientId: string, peer: Peer): Promise<boolean> {
+        peer.checkedAt = this.now();
+        let allowed: boolean;
+        try {
+            allowed = await this.deps.mayFollow(session.boardId, peer.workspaceId, peer.userId);
+        } catch (error) {
+            this.deps.logger.error({ err: error, boardId: session.boardId }, 'whiteboard: droit de suivre illisible');
+            return true;
+        }
+        if (allowed) return true;
+        if (session.peers.delete(clientId)) {
+            this.deps.publishTo(peer.workspaceId, [peer.userId], WHITEBOARD_CLOSED_EVENT, {
+                boardId: session.boardId,
+                reason: 'revoked'
+            });
+            this.publishPeers(session);
+            if (session.peers.size === 0) session.emptySince = this.now();
+        }
+        return false;
     }
 
     private peersOf(session: Session): WhiteboardPeer[] {

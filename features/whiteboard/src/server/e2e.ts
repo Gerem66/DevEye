@@ -333,6 +333,30 @@ export const whiteboardE2e: FeatureE2eEntry<WhiteboardRepo> = {
                     }
                 },
                 {
+                    label: 'Retirer le partage ferme la séance ouverte depuis le second espace',
+                    run: async (ctx) => {
+                        const boardId = boardOf(ctx).id;
+                        const ws = ctx.state.get('ws') as number;
+                        const projection = { feature: 'whiteboard', itemId: String(boardId), workspaceId: ws };
+                        const clientId = randomUUID();
+                        await ctx.send('whiteboard.join', { boardId, clientId }, { workspaceId: ws });
+                        await ctx.send('share.set', { ...projection, shared: false });
+                        const stroke = { boardId, clientId, elements: [element('e2e-apres-retrait')] };
+                        let refusal: string | undefined;
+                        try {
+                            await ctx.send('whiteboard.push', stroke, { workspaceId: ws });
+                        } catch (e) {
+                            refusal = (e as { code?: string }).code;
+                        }
+                        // Le partage revient pour la suite du parcours, quoi qu'il se soit passé.
+                        await ctx.send('share.set', { ...projection, shared: true });
+                        if (refusal === undefined) throw new Error('Le second espace dessine encore, partage retiré');
+                        if ((await storedElements(ctx, boardId)).some((el) => el.id === 'e2e-apres-retrait'))
+                            throw new Error('Le trait d’après le retrait est entré dans la scène');
+                        return `Trait refusé (${refusal})`;
+                    }
+                },
+                {
                     label: 'Le copier : de nouveaux objets, les mêmes octets',
                     run: async (ctx) => {
                         const boardId = boardOf(ctx).id;

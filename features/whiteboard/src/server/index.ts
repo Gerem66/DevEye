@@ -79,6 +79,10 @@ export const serverEntry: FeatureServer<WhiteboardRepo> = {
             publishTo: (workspaceId, userIds, event, payload) =>
                 deps.live.publishTo(workspaceId, userIds, event, payload),
             changed: (workspaceId) => deps.live.changed(workspaceId),
+            mayFollow: async (boardId, workspaceId, userId) => {
+                const verdict = await deps.access.feature(workspaceId, userId, { itemId: String(boardId) });
+                return verdict.ok && (await deps.repo.boards.findVisible(boardId, workspaceId)) !== null;
+            },
             logger: deps.logger
         });
 

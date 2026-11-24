@@ -46,7 +46,8 @@ const STATUS: Record<SessionStatus, { label: string; tone: 'ok' | 'busy' | 'warn
 
 const CLOSED = {
     removed: 'Ce tableau a été supprimé.',
-    moved: 'Ce tableau a été déplacé vers un autre espace.'
+    moved: 'Ce tableau a été déplacé vers un autre espace.',
+    revoked: 'Vous n’avez plus accès à ce tableau.'
 } as const;
 
 /**

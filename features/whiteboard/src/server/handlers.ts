@@ -65,6 +65,16 @@ const canWriteItem = (ctx: Ctx, boardId: number): Promise<boolean> =>
         () => false
     );
 
+/**
+ * Un pair qui suit le tableau depuis un autre espace : son partage tient-il
+ * encore ? Le contrôle d'accès de la commande ne le dit pas, il ne lit que le
+ * rôle. Sinon sa place se ferme, et la séance lui répond qu'elle a expiré.
+ */
+async function assertStillFollows(boardId: number, clientId: string): Promise<void> {
+    const { sessions } = whiteboard();
+    if (sessions.foreign(boardId, clientId)) await sessions.recheck(boardId, clientId);
+}
+
 export const whiteboardHandlers = [
     defineSdkFeature({
         ...whiteboardList,
@@ -362,19 +372,22 @@ export const whiteboardHandlers = [
     defineSdkFeature({
         ...whiteboardPush,
         access: { level: 'write', item: 'boardId' },
-        handler: (ctx: Ctx, input) =>
-            Promise.resolve(whiteboard().sessions.push(input.boardId, input.clientId, ctx.userId, input.elements))
+        handler: async (ctx: Ctx, input) => {
+            await assertStillFollows(input.boardId, input.clientId);
+            return whiteboard().sessions.push(input.boardId, input.clientId, ctx.userId, input.elements);
+        }
     }),
 
     defineSdkFeature({
         ...whiteboardPresence,
         access: { item: 'boardId' },
-        handler: (ctx: Ctx, input) => {
+        handler: async (ctx: Ctx, input) => {
+            await assertStillFollows(input.boardId, input.clientId);
             whiteboard().sessions.presence(input.boardId, input.clientId, ctx.userId, {
                 selectedIds: input.selectedIds,
                 laser: input.laser
             });
-            return Promise.resolve({});
+            return {};
         }
     })
 ];

@@ -20,6 +20,8 @@ function harness(initial: StoredScene | null = { workspaceId: 1, version: 1, ele
     let stored = initial;
     let loads = 0;
     let overQuota = false;
+    let followBroken = false;
+    const revoked = new Set<string>();
     const saves: { baseVersion: number; elements: readonly SceneElement[] }[] = [];
     const frames: { workspaceId: number; userIds: readonly number[]; event: string; payload: unknown }[] = [];
     const changed: number[] = [];
@@ -42,6 +44,10 @@ function harness(initial: StoredScene | null = { workspaceId: 1, version: 1, ele
         store,
         publishTo: (workspaceId, userIds, event, payload) => frames.push({ workspaceId, userIds, event, payload }),
         changed: (ws) => changed.push(ws),
+        mayFollow: (_boardId, workspaceId, userId) => {
+            if (followBroken) return Promise.reject(new Error('base indisponible'));
+            return Promise.resolve(!revoked.has(`${workspaceId}:${userId}`));
+        },
         logger: { info() {}, warn() {}, error() {}, debug() {} } as never,
         now: () => clock
     });
@@ -60,6 +66,9 @@ function harness(initial: StoredScene | null = { workspaceId: 1, version: 1, ele
     return {
         sessions,
         join,
+        /** Ce compte perd le droit de suivre le tableau depuis cet espace. */
+        revoke: (workspaceId: number, userId: number) => void revoked.add(`${workspaceId}:${userId}`),
+        breakFollow: () => void (followBroken = true),
         frames,
         saves,
         changed,
@@ -180,5 +189,50 @@ describe('Sessions', () => {
         assert.equal(h.sessions.participants(7), 0);
         assert.equal(h.frames.at(-1)?.event, 'whiteboard.closed');
         assert.equal(h.saves.length, 0);
+    });
+
+    it('ferme la place de qui perd le droit de suivre, au plus cinq secondes après, et le dit à lui seul', async () => {
+        const h = harness();
+        await h.join(A, 1);
+        await h.join(B, 2, 9);
+        h.revoke(9, 2);
+        h.advance(4_000);
+        await h.sessions.tick();
+        assert.equal(h.sessions.participants(7), 2);
+        h.advance(2_000);
+        await h.sessions.tick();
+        assert.equal(h.sessions.participants(7), 1);
+        const closed = h.frames.filter((f) => f.event === 'whiteboard.closed');
+        assert.deepEqual(closed, [
+            { workspaceId: 9, userIds: [2], event: 'whiteboard.closed', payload: { boardId: 7, reason: 'revoked' } }
+        ]);
+        assert.throws(() => h.sessions.push(7, B, 2, [el('x')]), { code: 'conflict' });
+        assert.equal(h.sessions.push(7, A, 1, [el('x')]).accepted, 1);
+    });
+
+    it('relit sur demande le droit d’un pair venu d’un autre espace', async () => {
+        const h = harness();
+        await h.join(A, 1);
+        await h.join(B, 2, 9);
+        assert.equal(h.sessions.foreign(7, A), false);
+        assert.equal(h.sessions.foreign(7, B), true);
+        assert.equal(await h.sessions.recheck(7, B), true);
+        h.revoke(9, 2);
+        assert.equal(await h.sessions.recheck(7, B), false);
+        assert.equal(h.sessions.participants(7), 1);
+        assert.equal(h.sessions.foreign(7, B), false);
+    });
+
+    it('ne ferme aucune place quand le droit ne se lit pas', async () => {
+        const h = harness();
+        await h.join(A, 1);
+        h.breakFollow();
+        h.advance(6_000);
+        await h.sessions.tick();
+        assert.equal(h.sessions.participants(7), 1);
+        assert.equal(
+            h.frames.some((f) => f.event === 'whiteboard.closed'),
+            false
+        );
     });
 });

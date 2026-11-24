@@ -97,6 +97,12 @@ Un membre en lecture seule entre dans la séance, voit tout en direct et montre
 son curseur ; Excalidraw s'ouvre en mode vue, et ses poussées seraient
 refusées.
 
+Une place se ferme quand son participant perd le droit de suivre le tableau :
+il quitte l'espace, son rôle ne le lit plus, le tableau lui est fermé, ou le
+partage vers son espace est retiré. Un trait envoyé depuis un autre espace que
+celui du tableau relit ce droit aussitôt ; un participant qui ne fait
+qu'écouter le perd au plus cinq secondes après, et son écran le dit.
+
 Les séances vivent dans le processus : deux serveurs sur la même base ne
 voient chacun que leurs participants, et ne s'écrasent pas pour autant.
 
