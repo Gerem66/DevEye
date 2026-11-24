@@ -2428,6 +2428,13 @@ CREATE TABLE `sentinel_allowlist` (
   CONSTRAINT `fk_allow_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `server_ref_key` (
+  `id` tinyint NOT NULL DEFAULT '1',
+  `sealed` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_server_ref_key_single` CHECK ((`id` = 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `site_maintenance` (
   `id` tinyint NOT NULL DEFAULT '1',
   `active` tinyint(1) NOT NULL DEFAULT '0',

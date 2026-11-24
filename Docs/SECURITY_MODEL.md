@@ -896,6 +896,27 @@ l'activité, pas son contenu.
 - **Partout** : les identifiants de ligne, l'espace et le compte propriétaires,
   les dates de création et de modification, les tailles.
 
+## Les condensés
+
+Le chiffrement n'est pas déterministe : ce qui doit rester unique, ou se
+retrouver sans être déchiffré, est doublé d'un condensé (`name_ref`,
+`author_ref`…). Un condensé nu, un SHA-256 de la valeur, se recalcule par qui
+devine la valeur : il confirme une hypothèse à quiconque lit la base, et un
+membre peut comparer le sien à celui d'un autre espace.
+
+La primitive `keys.ref` (`src/Services/refKeys.ts`) y répond : un HMAC-SHA256
+sous une clé que seul le serveur détient, propre au module et à l'usage, et
+lié à une portée (l'espace, l'élément) pour que la même valeur donne ailleurs
+un condensé sans rapport. Sa racine est tirée au sort au premier démarrage et
+scellée par la clé serveur (`server_ref_key`) ; le serveur refuse de démarrer
+s'il ne sait pas l'ouvrir, plutôt que d'en tirer une autre.
+
+Aujourd'hui, elle porte le condensé de l'identifiant saisi lors d'une connexion
+ratée sur un compte inconnu (`usernameRef` au journal d'audit, où l'on tape
+parfois son mot de passe par erreur). Les condensés de Git, de Bases,
+d'Audience, des Liens courts, des Stores et du module Audit sont encore des
+SHA-256 nus.
+
 ## Ce que le serveur ne lit jamais
 
 Au sens strict, celui où ni la clé ni le clair ne lui parviennent :

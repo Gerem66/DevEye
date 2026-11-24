@@ -6,7 +6,8 @@ import crypto from 'crypto';
  * pour un autre, même copié dans la bonne colonne. Un module scelle sous
  * `module:<id>`, dérivé de la même façon.
  */
-export type SealLabel = 'user-dek' | 'user-open-dek' | 'workspace-dek' | 'totp' | 'phone' | `module:${string}`;
+export type SealLabel =
+    'user-dek' | 'user-open-dek' | 'workspace-dek' | 'totp' | 'phone' | 'ref-root' | `module:${string}`;
 
 /** L'étiquette d'un module : celle de ses `keys.sealBytes`, et celle de ses colonnes déclarées. */
 export function moduleSealLabel(featureId: string): SealLabel {

@@ -32,6 +32,7 @@ export const CORE_EXPORT_TABLES: Readonly<Record<string, 'host' | { skip: string
     item_role_grants: { skip: 'Les droits d’un rôle sur un élément n’ont de sens que sur ce serveur.' },
     workspace_invitations: { skip: 'Une invitation ouvre un accès et porte l’adresse d’un tiers.' },
     user_2fa: { skip: 'Le secret de la double authentification ne sort jamais.' },
+    server_ref_key: { skip: 'La racine des condensés à clé ne sort jamais.' },
     user_2fa_backup_codes: { skip: 'Les codes de secours ne sortent jamais.' },
     user_secret_keys: { skip: 'Les clés de chiffrement ne sortent jamais.' },
     workspace_secret_keys: { skip: 'Les clés de chiffrement ne sortent jamais.' },

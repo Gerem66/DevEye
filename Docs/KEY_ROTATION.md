@@ -30,14 +30,15 @@ déclare (voir « Un module et sa clé »). La rotation, le re-scellement et le
 contrôle au boot lisent les deux. Un test vérifie que chaque cible du socle
 figure dans le tableau ci-dessous.
 
-| Où                                                             | Étiquette         | Contexte                         | Quoi                                                                   |
-| -------------------------------------------------------------- | ----------------- | -------------------------------- | ---------------------------------------------------------------------- |
-| `user_secret_keys.dek_wrapped` (lignes `wrap_mode = 'server'`) | `user-dek`        | `user_secret_keys:dek:<id>`      | la DEK gardée d'un compte dont le chiffrement par mot de passe est OFF |
-| `user_secret_keys.open_dek_wrapped`                            | `user-open-dek`   | `user_secret_keys:open_dek:<id>` | la DEK ouverte de chaque compte                                        |
-| `workspace_secret_keys.dek_wrapped`                            | `workspace-dek`   | `workspace_secret_keys:dek:<id>` | la WDK de chaque espace partagé                                        |
-| `user_2fa.secret_enc`                                          | `totp`            | `user_2fa:secret:<id>`           | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) |
-| `user_phones.phone_sealed`                                     | `phone`           | `user_phones:phone:<id>`         | le numéro du code par SMS, lisible à la connexion avant toute session  |
-| chaque colonne qu'un module déclare                            | `module:<son id>` | celui qu'il passe, vide sinon    | son matériel de clé, là où il le range                                 |
+| Où                                                             | Étiquette         | Contexte                         | Quoi                                                                                                  |
+| -------------------------------------------------------------- | ----------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `user_secret_keys.dek_wrapped` (lignes `wrap_mode = 'server'`) | `user-dek`        | `user_secret_keys:dek:<id>`      | la DEK gardée d'un compte dont le chiffrement par mot de passe est OFF                                |
+| `user_secret_keys.open_dek_wrapped`                            | `user-open-dek`   | `user_secret_keys:open_dek:<id>` | la DEK ouverte de chaque compte                                                                       |
+| `workspace_secret_keys.dek_wrapped`                            | `workspace-dek`   | `workspace_secret_keys:dek:<id>` | la WDK de chaque espace partagé                                                                       |
+| `user_2fa.secret_enc`                                          | `totp`            | `user_2fa:secret:<id>`           | le secret TOTP, scellé (pas une clé, mais lisible avant toute session)                                |
+| `user_phones.phone_sealed`                                     | `phone`           | `user_phones:phone:<id>`         | le numéro du code par SMS, lisible à la connexion avant toute session                                 |
+| `server_ref_key.sealed`                                        | `ref-root`        | `server_ref_key:sealed`          | la racine des condensés à clé (`keys.ref`) : ré-emballée, elle laisse chaque condensé tel qu'il était |
+| chaque colonne qu'un module déclare                            | `module:<son id>` | celui qu'il passe, vide sinon    | son matériel de clé, là où il le range                                                                |
 
 Parmi les modules : la BMK de CloudSync, les clés du Serveur mail (corps des
 boîtes, DKIM, certificat), la racine des clés et les signalements de
@@ -57,6 +58,10 @@ clé change avec la racine, et ce qu'elle a chiffré ou condensé ne se relit pl
 | la clé des codes de secours 2FA             | `HKDF(racine, 'deveye-backup-codes', 'v1')`, `src/Services/Totp.ts` : les codes sont rangés en HMAC sous cette clé                                                                              | tous les codes sont invalides ; chaque compte régénère les siens (la 2FA reste active, son secret est re-scellé)                            |
 | le sel des visiteurs d'Audience             | `HKDF(racine, 'audience', 'visitor-salt')`, `features/audience/src/server/service.ts` : entre dans chaque condensé de visiteur (`visitor_ref`)                                                  | les condensés changent une fois : un visiteur persistant est compté « nouveau » une fois (les condensés anonymes tournent déjà chaque jour) |
 | l'identité des lignes de relevé de Finances | `HKDF(racine, 'finance.statement', 'line-identity')`, `features/finance/src/server/reconcile.ts` : une ligne importée sans identifiant bancaire (CSV) porte pour identité un HMAC de ses champs | la même ligne réimportée reçoit une autre identité : elle n'est plus reconnue comme déjà présente                                           |
+
+Les condensés de `keys.ref` ne sont pas de cette famille : leur clé vient
+d'une racine tirée au sort et scellée (`server_ref_key`, ci-dessus), pas d'une
+dérivation. Une rotation la ré-emballe, et aucun condensé ne change.
 
 **Ce qui n'en dépend pas** : tout le contenu des features (sous DEK ou WDK),
 les blobs CloudSync (sous BMK, ou scellés par les appareils pour un partage

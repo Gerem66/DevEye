@@ -19,6 +19,7 @@ import type { AuditLog } from '@/Services/AuditLog';
 import { clearAttempts, recordFailedAttempt, type AttemptScope } from '@/Services/attempts';
 import type Encryption from '@/Services/Encryption';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
+import { refKeys } from '@/Services/refKeys';
 import { SecretKeyService } from '@/Services/SecretKeyService';
 import { claimPendingDek, DEFAULT_DEK_GRACE_MS, rememberSessionDek, stashPendingDek } from '@/Services/SecureStore';
 import { phoneContext } from '@/Services/sealContexts';
@@ -440,7 +441,7 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
                 ip: req.ip,
                 description: 'Échec de connexion : identifiant inconnu',
                 metadata: {
-                    usernameRef: sha256hex(attemptKey).slice(0, 16),
+                    usernameRef: refKeys().ref('core', 'login-identifier', '', attemptKey),
                     usernameLength: username.length,
                     reason: 'unknown_user'
                 }

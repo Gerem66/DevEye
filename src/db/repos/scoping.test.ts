@@ -508,6 +508,13 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             listByName: { args: ['n'] }
         }
     },
+    serverRefKey: {
+        global: "la racine des condensés à clé, une ligne pour l'instance",
+        methods: {
+            sealed: { args: [] },
+            insertSealed: { args: ['s'] }
+        }
+    },
     debug: {
         global: 'la page Tests et débogage, réservée aux administrateurs',
         methods: {

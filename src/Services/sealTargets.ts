@@ -2,6 +2,7 @@ import type { FeatureSealedColumn } from '@deveye/types/sdk/server';
 
 import type { Queryable } from '@/db/pool';
 import { moduleSealLabel, SEAL_VERSION, type SealLabel } from './Encryption';
+import { REF_ROOT_CONTEXT } from './refKeys';
 import { phoneContext, totpContext, userDekContext, userOpenDekContext, workspaceDekContext } from './sealContexts';
 
 /**
@@ -52,7 +53,8 @@ export const CORE_SEAL_TARGETS: readonly SealTarget[] = [
         id: 'user_id',
         label: 'phone',
         context: (id) => phoneContext(Number(id))
-    }
+    },
+    { table: 'server_ref_key', column: 'sealed', id: 'id', label: 'ref-root', context: () => REF_ROOT_CONTEXT }
 ];
 
 interface SealingModule {

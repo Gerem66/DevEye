@@ -45,6 +45,10 @@
       "class": "account",
       "columns": ["user_id"]
     },
+    "server_ref_key": {
+      "class": "instance",
+      "reason": "La racine des condensés à clé, une ligne pour toute l'instance."
+    },
     "site_maintenance": {
       "class": "instance",
       "reason": "La maintenance du site, pour toute l'instance."

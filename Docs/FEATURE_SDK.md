@@ -356,6 +356,19 @@ dormirait dans la sauvegarde qu'elle protège). Sauvegardes en dérive la clé d
 ses archives, que `scripts/restore-backup.mjs` refait sans DevEye ; Audience le
 sel de ses visiteurs ; Finances et Hébergement s'en servent aussi.
 
+`ref(purpose, scope, value)` rend un condensé à clé (HMAC-SHA256, 32
+caractères hexadécimaux) : de quoi retrouver une ligne par une valeur chiffrée
+sans la déchiffrer, un nom qui doit rester unique, un auteur à regrouper. Un
+SHA-256 nu se recalcule en devinant la valeur ; celui-ci demande une clé que
+seul le serveur détient, propre au module et à `purpose` (un par colonne).
+`scope` est ce dans quoi la valeur est unique : l'espace pour le nom d'un
+élément, l'élément pour ses lignes filles. La même valeur sous deux portées
+donne deux condensés sans rapport : rien ne relie deux espaces, et un membre ne
+peut pas éprouver une hypothèse depuis un espace à lui. La clé vient d'une
+racine scellée en base (`src/Services/refKeys.ts`), pas d'une dérivation : une
+rotation de la clé serveur ne change aucun condensé. Normaliser `value` avant
+(casse, espaces) si deux écritures doivent se confondre.
+
 ### Le magasin d'objets
 
 Capacité `'objects'` : `deps.objects(localDir)` rend le magasin de l'hôte
@@ -864,7 +877,7 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
 - `sharing` (`scope`, `setOrder` ; refusé sous `shareTier: 'never'`) ;
 - `domains` (`list`, `get`, `verified` ; refusé sans `domains` au manifest) ;
 - `providers.get(key)` ;
-- `keys` (`sealBytes`, `openBytes`, `derive`) ;
+- `keys` (`sealBytes`, `openBytes`, `derive`, `ref`) ;
 - `audit`, `logger`, `requestId`, `origins { app, public, site }` (où vit
   DevEye, sans barre finale : l'origine des membres, celle de l'écouteur
   public, et le site vitrine où vivent les pages légales, `null` sans site).

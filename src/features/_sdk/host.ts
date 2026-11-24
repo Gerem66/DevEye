@@ -1,5 +1,6 @@
 import type Encryption from '@/Services/Encryption';
 import { moduleSealLabel } from '@/Services/Encryption';
+import { refKeys } from '@/Services/refKeys';
 import type { SdkServerKeys } from '@deveye/types/sdk/server';
 import type { MonitorHub } from '@/agent/hub';
 import { agentConfigFor } from '@/agent/config';
@@ -56,12 +57,14 @@ export async function pushAgentConfig(deviceId: string): Promise<boolean> {
  * octets sous la sous-clé du module (`module:<id>`), et l'HKDF que
  * `scripts/restore-backup.mjs` refait sans DevEye (non étiqueté par module : ce
  * script ne connaît que `CRYPT_KEY_A/B`). La clé elle-même ne sort jamais.
+ * Les condensés à clé sont ceux de l'instance, rangés sous le module.
  */
 export function serverKeysOf(crypt: Encryption, featureId: string): SdkServerKeys {
     const label = moduleSealLabel(featureId);
     return {
         sealBytes: (plain, context = '') => crypt.sealFor(label, Buffer.from(plain), context),
         openBytes: (sealed, context = '') => crypt.openFor(label, sealed, context),
-        derive: (salt, info, length) => new Uint8Array(crypt.derive(salt, info, length))
+        derive: (salt, info, length) => new Uint8Array(crypt.derive(salt, info, length)),
+        ref: (purpose, scope, value) => refKeys().ref(label, purpose, scope, value)
     };
 }

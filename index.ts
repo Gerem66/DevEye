@@ -10,6 +10,7 @@ import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { appVersion } from '@/version';
 import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
+import { loadRefKeys, setRefKeys } from '@/Services/refKeys';
 import { assertSealFormat } from '@/Services/sealFormat';
 import { createDbPool, getQueryable, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
@@ -85,6 +86,12 @@ async function main() {
 
     const db = createDatabase(pool);
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
+    try {
+        setRefKeys(await loadRefKeys(db.serverRefKey, crypt));
+    } catch (e) {
+        logger.fatal((e as Error).message);
+        process.exit(1);
+    }
     systemAlerts.init({ db, crypt, logger, live: env.ENVIRONMENT === 'prod' });
 
     const { app, stopServices } = await buildApp({
