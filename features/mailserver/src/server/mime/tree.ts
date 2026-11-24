@@ -48,15 +48,17 @@ export interface MimeHeader {
 const LF = 0x0a;
 const CR = 0x0d;
 
-/** Au-delà, un message fabriqué pour épuiser la pile s'arrête d'être exploré. */
+/** Au-delà, un message fabriqué pour épuiser la pile ou la mémoire s'arrête d'être exploré. */
 const MAX_DEPTH = 20;
 const MAX_PARTS = 1_000;
 
 /** La fin des en-têtes : la première ligne vide. Rend le début du corps, ou `end` s'il n'y en a pas. */
 function findBodyStart(buf: Buffer, start: number, end: number): number {
+    // Une partie vide : l'octet qui suit est déjà celui de la frontière.
+    if (start >= end) return end;
     // Un message qui s'ouvre sur une ligne vide n'a pas d'en-têtes.
     if (buf[start] === LF) return start + 1;
-    if (buf[start] === CR && buf[start + 1] === LF) return start + 2;
+    if (buf[start] === CR && buf[start + 1] === LF) return Math.min(start + 2, end);
     for (let i = start; i < end; i += 1) {
         if (buf[i] !== LF) continue;
         if (buf[i + 1] === LF) return Math.min(i + 2, end);
@@ -126,21 +128,23 @@ interface Budget {
     parts: number;
 }
 
-/** Les bornes des parties d'un multipart : entre deux lignes `--frontière`. */
-function splitParts(buf: Buffer, start: number, end: number, boundary: string): [number, number][] {
+/** Les bornes des parties d'un multipart, `limit` au plus : entre deux lignes `--frontière`. */
+function splitParts(buf: Buffer, start: number, end: number, boundary: string, limit: number): [number, number][] {
     const delimiter = Buffer.from(`--${boundary}`, 'latin1');
+    // Chercher dans le message entier ferait relire sa fin à chaque partie qui annonce une frontière absente.
+    const scope = buf.subarray(0, end);
     const parts: [number, number][] = [];
     let open = -1;
     let at = start;
     while (at < end) {
-        const hit = buf.indexOf(delimiter, at);
-        if (hit === -1 || hit >= end) break;
+        const hit = scope.indexOf(delimiter, at);
+        if (hit === -1) break;
         at = hit + delimiter.length;
         if (hit !== start && buf[hit - 1] !== LF) continue;
 
-        const closing = buf[at] === 0x2d && buf[at + 1] === 0x2d;
-        let lineEnd = buf.indexOf(LF, at);
-        if (lineEnd === -1 || lineEnd >= end) lineEnd = end - 1;
+        const closing = at + 1 < end && buf[at] === 0x2d && buf[at + 1] === 0x2d;
+        let lineEnd = scope.indexOf(LF, at);
+        if (lineEnd === -1) lineEnd = end - 1;
         // Après la frontière, rien que des blancs : sinon c'est un préfixe d'une autre frontière.
         const tail = buf.subarray(closing ? at + 2 : at, lineEnd + 1).toString('latin1');
         if (tail.trim() !== '') continue;
@@ -152,7 +156,7 @@ function splitParts(buf: Buffer, start: number, end: number, boundary: string): 
             if (partEnd > open && buf[partEnd - 1] === CR) partEnd -= 1;
             parts.push([open, Math.max(open, partEnd)]);
         }
-        if (closing) return parts;
+        if (closing || parts.length >= limit) return parts;
         open = lineEnd + 1;
         at = open;
     }
@@ -206,7 +210,9 @@ function parseNode(
     const boundary = node.params.boundary;
     if (type === 'multipart' && boundary) {
         const childType = subtype === 'digest' ? 'message/rfc822' : 'text/plain';
-        for (const [partStart, partEnd] of splitParts(buf, bodyStart, end, boundary)) {
+        for (const [partStart, partEnd] of splitParts(buf, bodyStart, end, boundary, MAX_PARTS - budget.parts)) {
+            // Les parties déjà lues ont pu épuiser le budget avec leurs propres parties.
+            if (budget.parts >= MAX_PARTS) break;
             node.children.push(parseNode(buf, partStart, partEnd, childType, depth + 1, budget, false));
         }
         // Un multipart sans partie lisible se présente comme du texte : `BODYSTRUCTURE` n'a pas de forme pour le vide.

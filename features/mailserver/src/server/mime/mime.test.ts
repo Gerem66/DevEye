@@ -170,6 +170,18 @@ Content-Type: text/plain
     assert.ok(raw.subarray(tree.children[0].bodyStart, tree.children[0].end).toString().includes('--abc'));
 });
 
+test('une partie vide, entre deux frontières qui se suivent, pèse zéro octet', () => {
+    const raw = crlf(`Content-Type: multipart/mixed; boundary=b
+
+--b
+
+--b--
+`);
+    const [part] = parseMime(raw).children;
+    assert.equal(part.bodyStart, part.end);
+    assert.equal(wire(buildBodyStructure(parseMime(raw), false)), '(("text" "plain" NIL NIL NIL "7bit" 0 0) "mixed")');
+});
+
 test('parseContentField : guillemets, échappements, clés en double', () => {
     assert.deepEqual(parseContentField('Text/Plain; Charset="utf-8"; name="a;\\"b"; charset=autre'), {
         value: 'text/plain',
