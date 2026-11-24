@@ -89,6 +89,47 @@ facturation des comptes déclare un `sweep`.
 Dans le socle : `src/Services/debug/e2e/scenarios/`, même forme, avec
 `accounts: 0 | 1 | 2` pour les comptes ouverts avant la première étape.
 
+### Le parcours de cloisonnement
+
+Un module déclare, dans son entrée `e2e`, ce qu'un intrus tenterait
+(`isolation`, type `FeatureIsolation` du SDK) : ce qu'il sème chez une victime
+(`seed`, qui rend les identifiants créés), ce que la victime relit (`reads`) et
+ce que l'intrus envoie avec ces identifiants (`probes`). L'hôte en bâtit le
+parcours `<module>.isolation`, à deux comptes (`e2e/isolation.ts`) :
+
+| Étape                                                             | Ce qui doit tenir                                                                  |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| La victime sème dans un espace partagé, puis relit ses données    | chaque lecture réussit et porte la marque que `seed` a posée                       |
+| L'intrus, depuis son espace                                       | chaque sonde est refusée, aucune réponse ne porte la marque                        |
+| L'intrus, en nommant l'espace de la victime                       | même exigence                                                                      |
+| L'intrus, membre de l'espace sans aucun droit                     | même exigence                                                                      |
+| Avec le droit d'écrire il voit, puis chaque élément lui est fermé | il lit les données ; une fois l'élément fermé à son rôle, plus rien de lui ne sort |
+| Les données de la victime n'ont pas bougé                         | chaque lecture rend exactement ce qu'elle rendait                                  |
+
+Un refus ne compte que s'il est `forbidden` ou `not_found` : une sonde refusée
+pour `validation` ne prouve rien, c'est une faute du bloc. Deux marques sont
+remises à `seed` : `canary`, à mettre partout, et `itemCanary`, réservée à ce
+que montre un élément partageable (son titre), que plus aucune réponse ne doit
+porter une fois l'élément fermé.
+
+Ce que le bloc n'a pas à écrire :
+
+- une commande dont les seuls champs requis sont des identifiants semés
+  (`{ noteId }`) est sondée d'office ;
+- une commande qui ignore un identifiant étranger au lieu de le refuser (un
+  réordonnancement) se dit `lenient`, avec sa raison : sa réponse et les
+  données de la victime sont alors seules jugées ;
+- une commande à identifiant qui ne se sonde pas se dit `exempt`, avec sa
+  raison.
+
+`isolationProblems` (SDK) vérifie le bloc sans serveur : chaque commande dont
+l'entrée porte un champ `id`, `ids`, `…Id` ou `…Ids`, ou qui déclare
+`access.item`, a une sonde ou une dispense, et chaque sonde est acceptée par le
+schéma de sa commande. `src/features/_sdk/register.isolation.test.ts` l'affirme
+pour tout module installé qui déclare son bloc, et tient la liste des modules
+du dépôt qui ne l'ont pas encore : elle ne peut que rétrécir. Exemple :
+`features/notes/src/server/e2e.ts`.
+
 ### Hors de la page : `npm run e2e`
 
 Les mêmes parcours, lancés sans navigateur (`scripts/e2e-all.ts`) : le compte

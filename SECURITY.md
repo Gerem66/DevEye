@@ -58,7 +58,12 @@ that opens every module in a real browser; and the journeys of the "Tests and
 debugging" page, played by throwaway accounts against a server started for the
 occasion: signing up and deleting an account, a workspace shared by two, two-
 factor authentication, the emailed sign-in code, the forgotten password, and
-those the modules declare. Dependency advisories are checked every week for
+those the modules declare. Among them, an isolation journey for each module
+that has declared its probes: a second account attempts every command of the
+module that takes an id, from another workspace and then as a member with no
+rights, and everything must be refused without returning anything. The modules
+of the repository that do not have their probes yet are named in
+`src/features/_sdk/register.isolation.test.ts`. Dependency advisories are checked every week for
 the agent's crates and for the server's npm packages.
 
 These checks are written and maintained by the project itself. No third party

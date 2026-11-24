@@ -926,7 +926,12 @@ passage qui ouvre chaque module dans un vrai navigateur ; et les parcours de
 la page « Tests et débogage », joués par des comptes jetables sur un serveur
 démarré pour l'occasion : inscription et suppression d'un compte, espace
 partagé à deux, double authentification, code par mail, mot de passe oublié,
-et ceux que les modules déclarent. Les avis de sécurité des crates de l'agent
+et ceux que les modules déclarent. Parmi eux, un parcours de cloisonnement par
+module qui a déclaré ses sondes : un second compte y tente chaque commande à
+identifiant du module, depuis un autre espace puis comme membre sans droit, et
+tout doit lui être refusé sans rien rendre. Les modules du dépôt qui n'ont pas
+encore leurs sondes sont nommés dans
+`src/features/_sdk/register.isolation.test.ts`. Les avis de sécurité des crates de l'agent
 et des paquets npm du serveur sont relus chaque semaine.
 
 Ces contrôles sont écrits et tenus par le projet lui-même. Aucun tiers n'a

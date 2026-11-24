@@ -709,12 +709,15 @@ export function moduleE2eEntries(db: Database): {
     featureId: string;
     label: string;
     entry: FeatureE2eEntry<unknown>;
+    /** Les commandes du module, pour les sondes de cloisonnement. */
+    features: InstalledFeatureModule['server']['features'];
     repo: unknown;
 }[] {
     return MODULES.filter((mod) => mod.server.e2e).map((mod) => ({
         featureId: mod.manifest.id,
         label: mod.manifest.label,
         entry: mod.server.e2e!,
+        features: mod.server.features,
         repo: mod.repoFor(db)
     }));
 }

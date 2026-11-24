@@ -4,6 +4,8 @@ import type { Note, NoteBlock, NoteSummary } from '../contracts/domain';
 import type { NotesRepo } from './repo';
 
 const TITLE = 'Note d’essai de bout en bout';
+/** Ce que l'intrus tente d'écrire : valide pour la victime, donc refusé pour la seule raison qui compte. */
+const INTRUDER_DRAFT = { title: 'Écrit par l’intrus', private: false, blocks: [{ type: 'text', text: 'Intrus.' }] };
 
 function check(condition: unknown, message: string): asserts condition {
     if (!condition) throw new Error(message);
@@ -93,5 +95,39 @@ export const notesE2e: FeatureE2eEntry<NotesRepo> = {
                 }
             ]
         }
-    ]
+    ],
+    isolation: {
+        sampleIds: { noteId: 1, folderId: 1 },
+        async seed(ctx) {
+            const { folder } = await ctx.send<{ folder: { id: number } }>('notes.folderAdd', {
+                name: `Dossier ${ctx.canary}`
+            });
+            const { note } = await ctx.send<{ note: Note }>('notes.add', {
+                note: {
+                    title: `Note ${ctx.itemCanary}`,
+                    folderId: folder.id,
+                    private: false,
+                    blocks: [{ type: 'text', text: `Corps ${ctx.itemCanary}` }]
+                }
+            });
+            return { noteId: note.id, folderId: folder.id };
+        },
+        reads: (ids) => [
+            ['notes.get', { noteId: ids.noteId }],
+            ['notes.list', {}],
+            ['notes.count', {}],
+            ['notes.folderList', {}]
+        ],
+        probes: (ids) => [
+            ['notes.add', { note: { ...INTRUDER_DRAFT, folderId: ids.folderId } }],
+            ['notes.edit', { noteId: ids.noteId, note: { ...INTRUDER_DRAFT, folderId: null } }],
+            ['notes.reorder', { folderId: ids.folderId, noteIds: [ids.noteId] }],
+            ['notes.folderRename', { folderId: ids.folderId, name: 'Renommé par l’intrus' }],
+            ['notes.folderReorder', { folderIds: [ids.folderId] }]
+        ],
+        items: ['noteId'],
+        lenient: {
+            'notes.folderReorder': 'Un dossier qui n’est pas de l’espace est ignoré : la liste envoyée peut dater.'
+        }
+    }
 };

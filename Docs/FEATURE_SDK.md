@@ -461,8 +461,10 @@ mail du module construit par son vrai constructeur sur des données d'exemple
 (`sender: 'server'` exige `accounts.mail` ; `sender: 'workspace'` passe par une
 boîte Mail que l'administrateur choisit), et `e2e`, ses scénarios de bout en
 bout (`SdkE2eContext` : `send` par un vrai socket d'un compte jetable, `fetch`
-sans session, `waitFor`, `defer`) et le `sweep()` de ce qu'ils laisseraient hors
-de ses tables. `fetch` rend `status`, `body` et `headers` : noms en minuscules,
+sans session, `waitFor`, `defer`), le `sweep()` de ce qu'ils laisseraient hors
+de ses tables, et `isolation`, ce qu'un intrus d'un autre espace tenterait :
+l'hôte en bâtit un parcours à deux comptes (DEBUG.md, « Le parcours de
+cloisonnement »). `fetch` rend `status`, `body` et `headers` : noms en minuscules,
 valeurs répétées jointes par `, `, et une redirection n'est pas suivie (un 302
 revient tel quel, sa cible dans `headers.location`). Clés en
 `[a-z][a-zA-Z0-9]*`, uniques, vérifiées par `registerModules`. Facturation,
