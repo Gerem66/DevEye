@@ -1,3 +1,5 @@
+import { DEV } from '@/env';
+
 /**
  * La page affichée, en un chemin statique : la vue ouverte (`/uptime`), la
  * sous-vue qu'une feature déclare (`/audience/site/traffic`), ou la fenêtre de
@@ -69,7 +71,7 @@ export function setOverlayView(path: string | null): void {
 /** Une sous-vue d'une feature ; rend de quoi la retirer. Un segment qui n'est pas statique est ignoré. */
 export function addSubView(scope: string, segment: string): () => void {
     if (!SEGMENT.test(segment)) {
-        if (import.meta.env.DEV) console.warn(`useSubView : segment non statique ignoré (« ${segment} »)`);
+        if (DEV) console.warn(`useSubView : segment non statique ignoré (« ${segment} »)`);
         return () => undefined;
     }
     const key = Symbol(segment);

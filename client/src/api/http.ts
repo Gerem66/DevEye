@@ -16,11 +16,10 @@ import {
     type SessionTokens
 } from '@deveye/types';
 import { z } from 'zod';
+import { SERVER_URL as BASE_URL } from '@/env';
 import { getActiveInstanceId, getActiveWorkspaceId } from '@/stores/workspace';
 import { traceCall } from '@/diagnostics/trace';
 import { APP_VERSION_HEADER, reloadIfOutdated } from './version';
-
-const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
 export class ApiError extends Error {
     constructor(

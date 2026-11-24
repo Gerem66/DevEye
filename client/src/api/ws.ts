@@ -35,10 +35,9 @@ import { setAdmission, type Admission } from '@/stores/admission';
 import { forgetMaintenance, setMaintenance } from '@/stores/maintenance';
 import { ensureStepUp } from '@/stores/stepUp';
 import { applyTaskRemoved, applyTaskRoster, applyTaskUpdate, forgetInstanceTasks, setTaskRemote } from '@/stores/tasks';
+import { SERVER_URL as BASE_URL } from '@/env';
 import { randomUuid } from '@/randomUuid';
 import { reloadIfOutdated } from './version';
-
-const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
 /** L'adresse de la socket d'une instance, à partir de son origine HTTP. */
 export function wsUrlOf(origin: string, ticket?: string): string {

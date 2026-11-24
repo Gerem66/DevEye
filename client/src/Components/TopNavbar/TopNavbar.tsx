@@ -7,6 +7,7 @@ import { useDismissLayer } from '@/Components/Dialog';
 import { Hint, useHint } from '@/Components/Hint';
 import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
+import { DEV, ENV_NAME } from '@/env';
 import { avatarSrc } from '@/Features/Profile/avatar';
 import { openAccountView } from '@/stores/accountView';
 import { hasLocalWork, setPanelOpen, useTaskRecords, zoneOf } from '@/stores/tasks';
@@ -19,8 +20,7 @@ import { EditableTopbarWidgets } from './EditableTopbarWidgets';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import styles from './TopNavbar.module.css';
 
-const ENV = import.meta.env.VITE_ENV;
-const version = __APP_VERSION__ + (ENV === 'dev' ? '-dev' : '');
+const version = __APP_VERSION__ + (ENV_NAME === 'dev' ? '-dev' : '');
 
 /** Ease-out used for entering elements (fast arrival). */
 const COLLAPSE = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
@@ -435,7 +435,7 @@ export default function TopNavbar({
                 <ConnectionStatus />
                 {/* Hidden in the dev server — the agents aren't built there, so the
                     deployment status would load forever. */}
-                {!import.meta.env.DEV && <DeploymentStatus />}
+                {!DEV && <DeploymentStatus />}
                 <TasksStatus
                     open={tasksOpen}
                     onToggle={() => {

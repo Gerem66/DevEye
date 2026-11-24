@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { getLocal } from '@/api/http';
+import { DEV } from '@/env';
 import { serverStatusSchema, type ServerStatus } from '@deveye/types';
 
 /**
@@ -53,7 +54,7 @@ function startOnce(): void {
     started = true;
     // In the Vite dev server the agents aren't built, so the boot status never
     // settles: skip the polling entirely.
-    if (import.meta.env.DEV) return;
+    if (DEV) return;
     void poll();
 }
 
