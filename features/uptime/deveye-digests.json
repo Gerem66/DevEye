@@ -1,0 +1,16 @@
+{
+  "allow": {
+    "src/server/deploySources.ts": {
+      "count": 1,
+      "reason": "Le condensé du jeton d'une adresse d'appel, tiré au sort : son aléa ne se devine pas, une clé n'y ajouterait rien."
+    },
+    "src/server/integrity.ts": {
+      "count": 1,
+      "reason": "L'empreinte d'un fichier public d'un site surveillé, comparée d'un relevé à l'autre."
+    },
+    "src/server/statusPage/script.ts": {
+      "count": 1,
+      "reason": "L'ETag du script d'une page de statut, servi publiquement."
+    }
+  }
+}

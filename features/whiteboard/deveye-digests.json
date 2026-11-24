@@ -1,0 +1,8 @@
+{
+  "allow": {
+    "src/server/files.ts": {
+      "count": 1,
+      "reason": "L'empreinte d'une image, remise à la modération qui la compare à sa liste : c'est l'usage même de l'empreinte d'un fichier."
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "allow": {
+    "src/Services/Encryption.ts": {
+      "count": 1,
+      "reason": "La racine de la clé serveur, tirée de CRYPT_KEY_A et CRYPT_KEY_B : une dérivation de clé, rien n'en est écrit."
+    },
+    "src/Services/debug/e2e/identity.ts": {
+      "count": 1,
+      "reason": "L'étiquette d'un serveur dans l'adresse de ses comptes d'essai, tirée de son origine publique."
+    },
+    "src/Services/objectStorage/s3.ts": {
+      "count": 2,
+      "reason": "La signature SigV4 d'une requête et le Content-MD5 d'un envoi : le protocole S3 les impose, sur des octets déjà scellés."
+    },
+    "src/Services/sms/ovh.ts": {
+      "count": 1,
+      "reason": "La signature d'une requête à l'API d'OVH, qui impose ce SHA-1 ; le secret de l'application y entre."
+    },
+    "src/Services/tasks.ts": {
+      "count": 1,
+      "reason": "L'identifiant d'une opération de fond, tiré de ce qu'elle vise pour la retrouver après un redémarrage : en mémoire seulement."
+    },
+    "src/Utils/hash.ts": {
+      "count": 1,
+      "reason": "Le condensé d'un jeton tiré au sort (session d'appareil, réinitialisation, inscription, étape de connexion), dont l'aléa ne se devine pas : une clé n'y ajouterait rien. Sert aussi de clé en mémoire à un limiteur de débit."
+    },
+    "src/agent/sync.ts": {
+      "count": 2,
+      "reason": "La somme de contrôle d'un binaire d'agent publié, comparée à celle de son manifeste : publique."
+    },
+    "src/db/repos/refreshTokens.ts": {
+      "count": 1,
+      "reason": "Le condensé d'un jeton de session tiré au sort : son aléa ne se devine pas, une clé n'y ajouterait rien."
+    },
+    "src/features/_sdk/register.ts": {
+      "count": 1,
+      "reason": "L'ETag d'une image publique servie par l'app."
+    },
+    "src/features/sharing/copy.ts": {
+      "count": 2,
+      "reason": "La somme de contrôle d'une copie entre deux serveurs : elle voyage avec le paquet qu'elle vérifie, rien n'en est gardé."
+    },
+    "node_modules/@deveye/types/src/sdk/visitors.ts": {
+      "count": 1,
+      "reason": "L'empreinte d'un visiteur : le sel secret du module y entre en premier, et tourne chaque jour. Un condensé sous secret, pas un condensé nu."
+    }
+  }
+}

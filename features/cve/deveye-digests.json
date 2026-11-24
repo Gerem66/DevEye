@@ -1,0 +1,20 @@
+{
+  "allow": {
+    "src/server/exposure/shared.ts": {
+      "count": 1,
+      "reason": "L'empreinte d'un produit du NVD, par laquelle une CVE fraîchement ingérée trouve les éléments qu'elle touche sans rien déchiffrer. Le vocabulaire est public : qui lit la base retrouve par dictionnaire les produits qu'un élément emploie, l'inventaire scellé à côté n'en est pas protégé à ce grain."
+    },
+    "src/server/matching/match.ts": {
+      "count": 1,
+      "reason": "La clé d'unicité d'un constat dans son espace (une faille sur un paquet, une fin de vie). Tirée d'un vocabulaire public : qui lit la base peut retrouver par dictionnaire le sujet d'un constat, dont le détail reste scellé."
+    },
+    "src/server/matching/osv.ts": {
+      "count": 1,
+      "reason": "La clé d'un paquet dans le cache commun des réponses d'OSV : des données publiques, liées à aucun espace."
+    },
+    "src/server/matching/registry.ts": {
+      "count": 1,
+      "reason": "La clé d'un paquet dans le cache commun des registres : des données publiques, liées à aucun espace."
+    }
+  }
+}

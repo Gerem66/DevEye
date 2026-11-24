@@ -1,0 +1,8 @@
+{
+  "allow": {
+    "src/server/_shared.ts": {
+      "count": 1,
+      "reason": "La clé qui reconnaît le même signalement (règle, espace, empreinte du fichier, nom) : tirée de l'empreinte d'un fichier entier, qui ne se devine pas sans lui."
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "allow": {
+    "src/server/stores/apple.ts": {
+      "count": 1,
+      "reason": "La clé d'un cache en mémoire (clé importée, jeton signé), tirée des identifiants de la source : jamais écrite."
+    },
+    "src/server/stores/google.ts": {
+      "count": 1,
+      "reason": "La clé d'un cache en mémoire (clé importée, jeton d'accès), tirée des identifiants de la source : jamais écrite."
+    }
+  }
+}

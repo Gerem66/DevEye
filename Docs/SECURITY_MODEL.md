@@ -932,6 +932,24 @@ format sont reprises par une étape de données, au premier démarrage qui la
 porte ; si la clé d'un espace ne s'ouvre pas, le serveur refuse de démarrer
 plutôt que de laisser cet espace à l'ancien format.
 
+Un test empêche le motif de revenir (`scripts/lib/bare-digests.ts`) : tout
+appel à une fonction de hachage sans clé, dans le serveur, le client, les
+modules installés et `@deveye/types`, doit être déclaré par son fichier avec ce
+qu'il condense et pourquoi une clé n'y changerait rien (`src/digests.json`
+pour le socle, `deveye-digests.json` dans un module). Ce qui reste déclaré
+tient en quatre familles : le condensé d'un jeton tiré au sort, dont l'aléa ne
+se devine pas ; la somme de contrôle d'un fichier ou d'une archive ; ce qu'un
+protocole tiers impose (S3, OpenSSH, OVH) ; et l'unicité d'une valeur trop
+longue pour un index, lisible dans la colonne voisine.
+
+**Une exception connue : la veille CVE.** L'inventaire d'un élément est scellé,
+mais les empreintes des produits qu'il emploie (`ft_cve_asset_keys`) et la clé
+d'unicité de ses constats (`ft_cve_findings.subject_key`) sont des SHA-256 nus
+d'un vocabulaire public : noms de produits, de paquets, identifiants de
+failles. Qui lit la base retrouve donc par dictionnaire les produits employés
+et le sujet des constats (une faille sur un paquet, la fin de vie d'une
+version). L'inventaire complet et le détail des constats restent scellés.
+
 ## Ce que le serveur ne lit jamais
 
 Au sens strict, celui où ni la clé ni le clair ne lui parviennent :
@@ -957,7 +975,8 @@ l'agent ; un test qui confronte chaque requête des dépôts du socle à la gard
 qu'elle déclare (espace, compte, appareil) ; un contrôle qui prépare, sur une
 base MySQL jetable, chaque requête SQL que le serveur peut envoyer, puis relit
 chacune et refuse celle qui cite une table d'espace sans la borner à un espace,
-sauf dispense écrite avec sa raison ; un
+sauf dispense écrite avec sa raison ; un test qui refuse tout condensé sans
+clé non déclaré (voir « Les condensés ») ; un
 passage qui ouvre chaque module dans un vrai navigateur ; et les parcours de
 la page « Tests et débogage », joués par des comptes jetables sur un serveur
 démarré pour l'occasion : inscription et suppression d'un compte, espace

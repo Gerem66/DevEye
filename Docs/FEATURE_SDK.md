@@ -381,6 +381,30 @@ racine scellée en base (`src/Services/refKeys.ts`), pas d'une dérivation : une
 rotation de la clé serveur ne change aucun condensé. Normaliser `value` avant
 (casse, espaces) si deux écritures doivent se confondre.
 
+Un condensé sans clé ne passe pas inaperçu : un test de l'app
+(`scripts/lib/bare-digests.ts`) relève chaque `createHash(`, `crypto.hash(` et
+`subtle.digest(` d'un module installé, tests exclus, et échoue sur celui que
+le `deveye-digests.json` du module ne déclare pas. Une entrée par fichier, avec
+le nombre d'appels et la raison :
+
+```json
+{
+    "allow": {
+        "src/server/tokens.ts": {
+            "count": 1,
+            "reason": "Le condensé d'un jeton tiré au sort : son aléa ne se devine pas."
+        }
+    }
+}
+```
+
+Ce qui s'y déclare sans gêne : un jeton aléatoire, la somme de contrôle d'un
+fichier, un ETag, ce qu'un service tiers impose. Ce qui n'y a pas sa place : le
+condensé d'une valeur que le module chiffre par ailleurs (un nom, une adresse,
+un identifiant chez un tiers). Celle-là passe par `ref`. Une ligne dont le
+fichier ne condense plus rien fait échouer le test, comme un compte qui ne suit
+plus.
+
 ### Le magasin d'objets
 
 Capacité `'objects'` : `deps.objects(localDir)` rend le magasin de l'hôte

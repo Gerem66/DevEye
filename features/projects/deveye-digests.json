@@ -1,0 +1,12 @@
+{
+  "allow": {
+    "src/server/publicPage/routes.ts": {
+      "count": 1,
+      "reason": "L'ETag d'un fichier de la page publique d'un projet."
+    },
+    "src/server/publicPage/script.ts": {
+      "count": 1,
+      "reason": "L'ETag du script de la page publique d'un projet."
+    }
+  }
+}

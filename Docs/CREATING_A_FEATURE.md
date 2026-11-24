@@ -256,6 +256,10 @@ s'applique au socle, aux modules du dépôt, et à tout autre module qui a son
   `WHERE workspace_id = ? AND (${filtres})`, les parenthèses le contiennent.
   Une table calculée (`FROM ${table}`) n'est pas lue du tout.
 
+Un module qui hache sans clé (`createHash`, `subtle.digest`) le déclare de la
+même façon, dans son `deveye-digests.json` : voir « Les clés dérivées et le
+scellement » dans `FEATURE_SDK.md`.
+
 Ce que la base ne dit pas se déclare dans le `deveye-scope.json` du module
 (`src/db/scope.json` pour le socle) :
 

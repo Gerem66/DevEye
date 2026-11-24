@@ -1,0 +1,12 @@
+{
+  "allow": {
+    "src/server/normalize.ts": {
+      "count": 1,
+      "reason": "L'empreinte d'un visiteur persistant : le sel secret du module et la clé du site y entrent. Un condensé sous secret, pas un condensé nu."
+    },
+    "src/server/script.ts": {
+      "count": 1,
+      "reason": "L'ETag du script de mesure, servi publiquement."
+    }
+  }
+}

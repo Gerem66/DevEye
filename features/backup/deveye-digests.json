@@ -1,0 +1,12 @@
+{
+  "allow": {
+    "src/server/service.ts": {
+      "count": 1,
+      "reason": "La somme de contrôle du clair d'une archive, gardée pour vérifier une restauration : le contenu entier d'une archive ne se devine pas."
+    },
+    "src/server/sftp.ts": {
+      "count": 1,
+      "reason": "L'empreinte d'une clé d'hôte SSH, au format d'OpenSSH : publique par nature."
+    }
+  }
+}

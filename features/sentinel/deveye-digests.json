@@ -1,0 +1,8 @@
+{
+  "allow": {
+    "src/server/repo.ts": {
+      "count": 2,
+      "reason": "L'unicité d'une clé trop longue pour un index (un chemin, une règle et son sujet) : la valeur lisible est dans la colonne voisine, l'empreinte ne cache rien."
+    }
+  }
+}
