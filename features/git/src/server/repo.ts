@@ -404,10 +404,13 @@ export function createRepo(q: SdkQueryable): GitRepo {
             );
             if (owned.length === 0) return false;
 
-            await q.execute('DELETE FROM git_commits WHERE repo_id = ?', [repoId]);
-            await q.execute('DELETE FROM git_branches WHERE repo_id = ?', [repoId]);
-            await q.execute('DELETE FROM git_releases WHERE repo_id = ?', [repoId]);
-            await q.execute('DELETE FROM git_pull_requests WHERE repo_id = ?', [repoId]);
+            await q.execute('DELETE FROM git_commits WHERE repo_id = ? AND workspace_id = ?', [repoId, workspaceId]);
+            await q.execute('DELETE FROM git_branches WHERE repo_id = ? AND workspace_id = ?', [repoId, workspaceId]);
+            await q.execute('DELETE FROM git_releases WHERE repo_id = ? AND workspace_id = ?', [repoId, workspaceId]);
+            await q.execute('DELETE FROM git_pull_requests WHERE repo_id = ? AND workspace_id = ?', [
+                repoId,
+                workspaceId
+            ]);
 
             // `sync_state` porte les ETags et le drapeau de backfill : le vider fait
             // repartir la lecture de zéro. `last_sync_at` à NULL remet le dépôt en

@@ -93,7 +93,8 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
         findings: {
             upsert: unused,
             resolveMissing: unused,
-            find: async (id) => findingRows.find((r) => r.id === id) ?? null,
+            find: async (id, deviceIds) =>
+                findingRows.find((r) => r.id === id && deviceIds.includes(r.device_id)) ?? null,
             list: async (filter) => {
                 const rows = findingRows.filter(
                     (r) =>
@@ -326,6 +327,16 @@ describe('sentinel.acknowledge et sentinel.resolve : un groupe d’un geste', ()
             (e: unknown) => e instanceof FeatureError && e.code === 'not_found'
         );
         assert.equal(repo.allowRows.length, 0);
+        assert.equal(repo.findingRows[0].state, 'open');
+    });
+
+    it('répond « introuvable » pour le constat d’un appareil que l’appelant ne voit pas, comme pour un inconnu', async () => {
+        const repo = fakeRepo([finding({ id: 1, device_id: 'dev-ailleurs' })]);
+        const ctx = createTestContext({ repo, devices: FLEET });
+        await assert.rejects(
+            handlerFor(sentinelAcknowledge)(ctx, { findingIds: [1], scope: 'device', reason: null }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'not_found' && e.message === 'Constat introuvable'
+        );
         assert.equal(repo.findingRows[0].state, 'open');
     });
 

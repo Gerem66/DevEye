@@ -192,7 +192,6 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             const j = jobs.find((x) => x.id === id && visible(x, workspaceId));
             return j ? withState(j) : null;
         },
-        findJobById: async (id) => jobs.find((j) => j.id === id) ?? null,
         countJobs: async (workspaceId) => ({
             count: jobs.filter((j) => j.workspace_id === workspaceId && j.enabled === 1).length,
             failing: 0
@@ -246,7 +245,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         setNextRun: async () => undefined,
         listRuns: async (jobId) => runs.filter((r) => r.job_id === jobId),
         listWorkspaceRuns: async (workspaceId) => runs.filter((r) => r.workspace_id === workspaceId),
-        findRun: async (id) => runs.find((r) => r.id === id) ?? null,
+        findRun: async (id, workspaceId) => runs.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
         async startRun(input) {
             const created: BackupRunRow = {
                 id: ++seq,
@@ -682,6 +681,17 @@ describe('Backup : handlers', () => {
 
         repo.runs.push(successRun({ id: 4, job_id: 10 }));
         await assert.rejects(handlerFor(backupRunRemove)(ctx, { runId: 4 }), failsWith('conflict'));
+    });
+
+    it('la sauvegarde d’un autre espace est introuvable, comme une sauvegarde qui n’existe pas', async () => {
+        const repo = fakeRepo();
+        repo.destinations.push(destination({ id: 1, workspace_id: 2 }));
+        repo.jobs.push(job({ id: 10, workspace_id: 2 }));
+        repo.runs.push(successRun({ id: 1, job_id: 10, workspace_id: 2 }));
+        const engine = fakeEngine();
+        const ctx = createTestContext({ repo, workspaceId: 1 });
+        await assert.rejects(handlerFor(backupRunRemove)(ctx, { runId: 1 }), failsWith('not_found'));
+        assert.deepEqual(engine.erased, []);
     });
 
     it('un travail en cours ne se supprime pas', async () => {

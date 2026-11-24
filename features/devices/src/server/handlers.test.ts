@@ -196,7 +196,6 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
         calls,
         devices: {
             findById: async (id) => copy(find(id)),
-            findByIds: async (ids) => ids.flatMap((id) => copy(find(id)) ?? []),
             listVisible: async (workspaceId) =>
                 deviceRows
                     .filter((r) => r.workspace_id === workspaceId || (shareMap.get(r.id) ?? []).includes(workspaceId))

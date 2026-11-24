@@ -212,7 +212,6 @@ export function memoryRepo(): MemoryRepo {
             ),
         findFolder: (mailboxId, path) =>
             Promise.resolve(copy(folders.find((f) => f.mailbox_id === mailboxId && f.path === path))),
-        findFolderById: (id) => Promise.resolve(copy(folders.find((f) => f.id === id))),
         createFolder(input) {
             const id = nextId();
             folders.push({
@@ -390,7 +389,7 @@ export function memoryRepo(): MemoryRepo {
             queue.splice(0, queue.length, ...queue.filter((q) => q.id !== id));
             return Promise.resolve();
         },
-        findQueue: (id) => Promise.resolve(copy(queue.find((q) => q.id === id))),
+        findQueue: (id, ws) => Promise.resolve(copy(queue.find((q) => q.id === id && q.workspace_id === ws))),
         listQueue: (ws, mailboxId) =>
             Promise.resolve(
                 queue

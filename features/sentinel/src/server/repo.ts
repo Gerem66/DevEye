@@ -248,7 +248,8 @@ export interface FindingsRepo {
     upsert(deviceId: string, draft: FindingDraft, at: number): Promise<FindingUpsert>;
     /** Marque résolus les constats ouverts d'un appareil absents de `keep`. */
     resolveMissing(deviceId: string, rules: SentinelRuleId[], keep: Buffer[], at: number): Promise<number>;
-    find(findingId: number): Promise<FindingRow | null>;
+    /** Le constat, s'il porte sur l'un de ces appareils : ceux que l'appelant voit. */
+    find(findingId: number, deviceIds: readonly string[]): Promise<FindingRow | null>;
     list(filter: FindingsFilter): Promise<{ rows: FindingRow[]; total: number }>;
     openCounts(deviceIds: string[]): Promise<Record<FindingSeverity, number>>;
     /** Le même décompte, éclaté par appareil : une requête pour toute la flotte. */
@@ -372,8 +373,12 @@ export function findingsRepo(q: Q): FindingsRepo {
             return upd.affectedRows;
         },
 
-        async find(findingId) {
-            const rows = await q.query<FindingRow>(`${FINDING_SELECT} WHERE f.id = ?`, [findingId]);
+        async find(findingId, deviceIds) {
+            if (deviceIds.length === 0) return null;
+            const rows = await q.query<FindingRow>(
+                `${FINDING_SELECT} WHERE f.id = ? AND f.device_id IN (${marksFor(deviceIds)})`,
+                [findingId, ...deviceIds]
+            );
             const row = rows[0];
             return row ? hydrateFinding(row) : null;
         },

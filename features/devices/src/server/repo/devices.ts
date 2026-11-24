@@ -19,8 +19,6 @@ export interface DeviceConfigPatch {
  */
 export interface DeviceRepo {
     findById(id: string): Promise<DeviceRow | null>;
-    /** Les lignes des identifiants donnés, dans l'ordre demandé ; un inconnu est absent. */
-    findByIds(ids: string[]): Promise<DeviceRow[]>;
     /**
      * Les appareils que cet espace voit : les siens et ceux qui y sont projetés,
      * rangés selon le rang propre à cet espace.
@@ -62,16 +60,6 @@ export function deviceRepo(q: SdkQueryable): DeviceRepo {
         async findById(id) {
             const rows = await q.query<DeviceRow>('SELECT * FROM devices WHERE id = ?', [id]);
             return rows[0] ?? null;
-        },
-        async findByIds(ids) {
-            if (ids.length === 0) return [];
-            const rows = await q.query<DeviceRow>(
-                `SELECT * FROM devices WHERE id IN (${ids.map(() => '?').join(',')})`,
-                ids
-            );
-            // L'ordre est celui de l'appelant, pas celui de l'index.
-            const byId = new Map(rows.map((r) => [r.id, r]));
-            return ids.flatMap((id) => byId.get(id) ?? []);
         },
         async listVisible(workspaceId) {
             // Le rang est celui de l'espace qui regarde : le sien sur la ligne

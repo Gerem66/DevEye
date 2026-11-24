@@ -762,7 +762,7 @@ const runRemoveFeature = defineSdkFeature({
     access: { level: 'write', item: jobOfRun },
     mutates: true,
     handler: async (ctx: Ctx, input) => {
-        const run = await ctx.repo.findRun(input.runId);
+        const run = await ctx.repo.findRun(input.runId, ctx.workspaceId);
         if (!run) throw new FeatureError('not_found', 'Sauvegarde introuvable');
         const job = await loadHomeJob(ctx, run.job_id);
         if (run.status !== 'success' || run.pruned === 1) {

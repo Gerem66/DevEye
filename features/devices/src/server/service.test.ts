@@ -31,7 +31,6 @@ function fakeRepo(pruned: string[]): DevicesRepo {
     return {
         devices: {
             findById: unused,
-            findByIds: unused,
             listVisible: unused,
             findVisible: unused,
             setStatus: unused,

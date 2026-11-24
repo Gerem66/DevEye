@@ -351,10 +351,8 @@ export const mailserverHandlers = [
         access: { level: 'write', extras: ['manageQueue'], item: mailboxOfQueueEntry },
         mutates: ['mailserverFlow'],
         handler: async (ctx: Ctx, input) => {
-            const entry = await ctx.repo.findQueue(input.queueId);
-            if (!entry || entry.workspace_id !== ctx.workspaceId) {
-                throw new FeatureError('not_found', 'Ce message n’est plus dans la file.');
-            }
+            const entry = await ctx.repo.findQueue(input.queueId, ctx.workspaceId);
+            if (!entry) throw new FeatureError('not_found', 'Ce message n’est plus dans la file.');
             await ctx.items.assert(String(entry.mailbox_id), 'write');
             await ctx.repo.retryQueueNow(entry.id, now());
             getEngine()?.kickQueue();
@@ -367,10 +365,8 @@ export const mailserverHandlers = [
         access: { level: 'write', extras: ['manageQueue'], item: mailboxOfQueueEntry },
         mutates: ['mailserverFlow'],
         handler: async (ctx: Ctx, input) => {
-            const entry = await ctx.repo.findQueue(input.queueId);
-            if (!entry || entry.workspace_id !== ctx.workspaceId) {
-                throw new FeatureError('not_found', 'Ce message n’est plus dans la file.');
-            }
+            const entry = await ctx.repo.findQueue(input.queueId, ctx.workspaceId);
+            if (!entry) throw new FeatureError('not_found', 'Ce message n’est plus dans la file.');
             await ctx.items.assert(String(entry.mailbox_id), 'write');
             if (entry.status === 'sending') {
                 throw new FeatureError('conflict', 'Ce message est en cours de remise : réessayez dans un instant.');

@@ -55,8 +55,11 @@ async function homeDevice(ctx: Ctx, deviceId: string, level: 'read' | 'write' = 
 async function authorizedFindings(ctx: Ctx, ids: readonly number[]): Promise<AuthorizedFinding[]> {
     const devices = new Map<string, SdkDevice>();
     const out: AuthorizedFinding[] = [];
+    // Hors des appareils visibles d'ici, un constat n'existe pas : la réponse
+    // ne dit pas s'il existe ailleurs.
+    const visible = (await ctx.deveye.devices.list()).map((d) => d.id);
     for (const id of new Set(ids)) {
-        const row = await ctx.repo.findings.find(id);
+        const row = await ctx.repo.findings.find(id, visible);
         if (!row) throw new FeatureError('not_found', 'Constat introuvable');
         let device = devices.get(row.device_id);
         if (!device) {
@@ -71,7 +74,9 @@ async function authorizedFindings(ctx: Ctx, ids: readonly number[]): Promise<Aut
 /** Les constats d'un lot tels qu'ils sont après l'écriture. */
 async function reread(ctx: Ctx, batch: readonly AuthorizedFinding[]) {
     return Promise.all(
-        batch.map(async ({ row, device }) => toFinding((await ctx.repo.findings.find(row.id)) ?? row, device.name))
+        batch.map(async ({ row, device }) =>
+            toFinding((await ctx.repo.findings.find(row.id, [row.device_id])) ?? row, device.name)
+        )
     );
 }
 
@@ -245,7 +250,8 @@ export const sentinelHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            const row = await ctx.repo.findings.find(input.findingId);
+            const visible = (await ctx.deveye.devices.list()).map((d) => d.id);
+            const row = await ctx.repo.findings.find(input.findingId, visible);
             if (!row) throw new FeatureError('not_found', 'Constat introuvable');
             const device = await homeDevice(ctx, row.device_id);
 
@@ -260,7 +266,7 @@ export const sentinelHandlers = [
                 metadata: { deviceId: device.id, rule: row.rule, subject: row.subject }
             });
 
-            const updated = await ctx.repo.findings.find(row.id);
+            const updated = await ctx.repo.findings.find(row.id, [row.device_id]);
             return { finding: toFinding(updated ?? row, device.name) };
         }
     }),

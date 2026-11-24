@@ -70,7 +70,10 @@ export function createRepo(q: SdkQueryable): WeatherRepo {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [id, userId, workspaceId, label, latitude, longitude, format, days, provider, position, isPrimary]
             );
-            const rows = await q.query<WeatherLocationRow>('SELECT * FROM weather_locations WHERE id = ?', [id]);
+            const rows = await q.query<WeatherLocationRow>(
+                'SELECT * FROM weather_locations WHERE id = ? AND workspace_id = ?',
+                [id, workspaceId]
+            );
             return rows[0];
         },
         async updateLocation(id, workspaceId, patch) {

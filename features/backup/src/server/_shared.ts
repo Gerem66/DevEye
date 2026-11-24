@@ -39,7 +39,8 @@ import type { BackupRepo } from './repo';
 export type Ctx = SdkFeatureContext<BackupRepo>;
 
 /** Le travail d'une sauvegarde passée, pour `access.item`. */
-export const jobOfRun = async (ctx: Ctx, input: { runId: number }) => (await ctx.repo.findRun(input.runId))?.job_id;
+export const jobOfRun = async (ctx: Ctx, input: { runId: number }) =>
+    (await ctx.repo.findRun(input.runId, ctx.workspaceId))?.job_id;
 
 /** Ce que `content` porte, chiffré, sur une destination. */
 export interface StoredDestination {

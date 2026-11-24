@@ -197,7 +197,6 @@ export interface MailserverRepo {
 
     listFolders(mailboxId: number): Promise<FolderRow[]>;
     findFolder(mailboxId: number, path: string): Promise<FolderRow | null>;
-    findFolderById(id: number): Promise<FolderRow | null>;
     createFolder(input: {
         mailboxId: number;
         path: string;
@@ -254,7 +253,7 @@ export interface MailserverRepo {
     deferQueue(id: number, attempts: number, nextAttemptAt: number, content: string): Promise<void>;
     retryQueueNow(id: number, now: number): Promise<void>;
     removeQueue(id: number): Promise<void>;
-    findQueue(id: number): Promise<QueueRow | null>;
+    findQueue(id: number, workspaceId: number): Promise<QueueRow | null>;
     listQueue(workspaceId: number, mailboxId: number | null): Promise<QueueRow[]>;
     /** Les lignes restées « en cours » à l'arrêt du processus reprennent leur place. */
     requeueStuck(): Promise<void>;
@@ -566,10 +565,6 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
             );
         },
 
-        async findFolderById(id) {
-            return one(await q.query<FolderRow>('SELECT * FROM ft_mailserver_folders WHERE id = ?', [id]));
-        },
-
         async createFolder(input) {
             const res = await q.execute(
                 'INSERT INTO ft_mailserver_folders (mailbox_id, path, special_use, uid_validity) VALUES (?, ?, ?, ?)',
@@ -767,8 +762,13 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
             await q.execute('DELETE FROM ft_mailserver_queue WHERE id = ?', [id]);
         },
 
-        async findQueue(id) {
-            const row = one(await q.query<QueueRow>('SELECT * FROM ft_mailserver_queue WHERE id = ?', [id]));
+        async findQueue(id, workspaceId) {
+            const row = one(
+                await q.query<QueueRow>('SELECT * FROM ft_mailserver_queue WHERE id = ? AND workspace_id = ?', [
+                    id,
+                    workspaceId
+                ])
+            );
             return row ? queue(row) : null;
         },
 

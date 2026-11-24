@@ -63,8 +63,6 @@ export interface BackupRepo {
     findVisibleJob(id: number, workspaceId: number): Promise<BackupJobRow | null>;
     findJobWithState(id: number, workspaceId: number): Promise<BackupJobWithStateRow | null>;
     findVisibleJobWithState(id: number, workspaceId: number): Promise<BackupJobWithStateRow | null>;
-    /** Sans filtre d'espace : l'ordonnanceur tient déjà l'identité de la ligne. */
-    findJobById(id: number): Promise<BackupJobRow | null>;
     countJobs(workspaceId: number): Promise<{ count: number; failing: number }>;
     createJob(input: {
         workspaceId: number;
@@ -112,7 +110,7 @@ export interface BackupRepo {
 
     listRuns(jobId: number, workspaceId: number, limit: number): Promise<BackupRunRow[]>;
     listWorkspaceRuns(workspaceId: number, limit: number): Promise<BackupRunRow[]>;
-    findRun(id: number): Promise<BackupRunRow | null>;
+    findRun(id: number, workspaceId: number): Promise<BackupRunRow | null>;
     startRun(input: {
         jobId: number;
         workspaceId: number;
@@ -334,11 +332,6 @@ export function createRepo(q: Q): BackupRepo {
             return rows[0] ?? null;
         },
 
-        async findJobById(id) {
-            const rows = await q.query<BackupJobRow>('SELECT * FROM backup_jobs WHERE id = ?', [id]);
-            return rows[0] ?? null;
-        },
-
         async countJobs(workspaceId) {
             const rows = await q.query<{ n: number; failing: number }>(
                 `SELECT COUNT(*) AS n,
@@ -444,8 +437,11 @@ export function createRepo(q: Q): BackupRepo {
                 [workspaceId]
             ),
 
-        async findRun(id) {
-            const rows = await q.query<BackupRunRow>('SELECT * FROM backup_runs WHERE id = ?', [id]);
+        async findRun(id, workspaceId) {
+            const rows = await q.query<BackupRunRow>('SELECT * FROM backup_runs WHERE id = ? AND workspace_id = ?', [
+                id,
+                workspaceId
+            ]);
             return rows[0] ?? null;
         },
 
