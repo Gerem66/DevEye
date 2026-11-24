@@ -42,10 +42,13 @@ qui resterait sous l'ancien codec se lirait « (verrouillé) » pour toujours.
 - **Un secret n'est jamais rendu.** Le DTO d'un compte porte ses hôtes et ses
   ports, jamais un mot de passe, un jeton OAuth ni les identifiants d'un proxy ;
   le formulaire d'édition redemande, et un champ vide veut dire « garder ».
-- **Une boîte gardée n'existe pas dans un espace partagé**
-  (`assertTierAllowed`) : les deux étages y utilisent la clé de l'espace,
-  lisible par tout membre, et le palier annoncerait une protection qu'il ne
-  donne pas. Refus explicite, jamais retombée silencieuse sur `open`.
+- **Une boîte gardée n'existe que là où le mot de passe garde vraiment la
+  clé** (`assertTierAllowed`) : pas dans un espace partagé, où les deux étages
+  utilisent la clé de l'espace, lisible par tout membre, ni sur un compte sans
+  chiffrement par mot de passe, où le serveur ouvre la clé seul
+  (`ctx.secrecy.isPasswordProtected()`). Le palier annoncerait une protection
+  qu'il ne donne pas. Refus explicite, jamais retombée silencieuse sur `open`.
+  Une boîte déjà gardée le reste et se règle encore.
 - **Une lecture sur une boîte gardée répond `locked` à une session scellée**
   (`assertMailUnlocked`, avant de lire) ; la liste des comptes, elle, ne lève
   pas : elle masque (« (compte verrouillé) »), pour que le compte se voie et

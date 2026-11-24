@@ -177,17 +177,26 @@ export async function assertMailUnlocked(ctx: Ctx, tier: MailSecurityTier): Prom
 }
 
 /**
- * Le palier « guarded » n'a de sens que dans un espace personnel : dans un
- * espace partagé, les deux étages utilisent la clé de l'espace, lisible par
- * tout membre, et le palier annoncerait une protection qu'il ne donne pas.
+ * Le palier « guarded » n'a de sens que là où le mot de passe du compte garde
+ * vraiment la clé : un espace personnel, chiffrement par mot de passe activé.
+ * Dans un espace partagé, les deux étages utilisent la clé de l'espace, lisible
+ * par tout membre ; sans chiffrement par mot de passe, le serveur ouvre la clé
+ * seul. Le palier annoncerait une protection qu'il ne donne pas.
  */
-export function assertTierAllowed(ctx: Ctx, tier: MailSecurityTier): void {
-    if (tier === 'open' || ctx.workspace.kind === 'personal') return;
-    throw new FeatureError(
-        'validation',
-        'Une boîte protégée n’existe que dans votre espace personnel : dans un espace partagé, ' +
-            'elle serait lisible par tous les membres.'
-    );
+export async function assertTierAllowed(ctx: Ctx, tier: MailSecurityTier, current?: MailSecurityTier): Promise<void> {
+    if (tier === 'open') return;
+    if (ctx.workspace.kind !== 'personal') {
+        throw new FeatureError(
+            'validation',
+            'Une boîte protégée n’existe que dans votre espace personnel : dans un espace partagé, ' +
+                'elle serait lisible par tous les membres.'
+        );
+    }
+    // Une boîte déjà protégée le reste, et se règle encore : seul le passage à
+    // « protégée » exige que le mot de passe garde la clé.
+    if (current !== 'guarded' && !(await ctx.secrecy.isPasswordProtected())) {
+        throw new FeatureError('validation', 'Activez d’abord le chiffrement par mot de passe, dans Sécurité.');
+    }
 }
 
 export async function encryptCredentials(cipher: SdkCipher, credentials: MailCredentials): Promise<string> {

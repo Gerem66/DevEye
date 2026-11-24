@@ -17,7 +17,8 @@ import {
     MAIL_SYNC_INTERVAL_DEFAULT_MINUTES,
     mailOAuthProviderSchema,
     mailSecurityTierSchema,
-    type MailAccountRow
+    type MailAccountRow,
+    type MailSecurityTier
 } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { z } from 'zod';
@@ -123,7 +124,7 @@ export const mailAccountAddFeature = defineSdkFeature<
     access: WRITE,
     mutates: true,
     handler: async (ctx, input) => {
-        assertTierAllowed(ctx, input.draft.securityTier);
+        await assertTierAllowed(ctx, input.draft.securityTier);
         await ctx.quota.assert('accounts', async (owned) => (await ctx.repo.accounts.countInWorkspaces(owned)) + 1);
         await assertMailUnlocked(ctx, input.draft.securityTier);
         const cipher = cipherFor(ctx, input.draft.securityTier);
@@ -174,7 +175,7 @@ export const mailAccountUpdateFeature = defineSdkFeature<
             );
         }
         await assertMailUnlocked(ctx, existing.security_tier);
-        assertTierAllowed(ctx, input.draft.securityTier);
+        await assertTierAllowed(ctx, input.draft.securityTier, existing.security_tier);
         await assertMailUnlocked(ctx, input.draft.securityTier);
         const cipher = cipherFor(ctx, input.draft.securityTier);
 
@@ -239,7 +240,7 @@ export const mailAccountSetProfileFeature = defineSdkFeature<
         // Both ends of the move have to be reachable: reading what's there now,
         // and writing it back under the tier the user is switching to.
         await assertMailUnlocked(ctx, existing.security_tier);
-        assertTierAllowed(ctx, input.securityTier);
+        await assertTierAllowed(ctx, input.securityTier, existing.security_tier);
         await assertMailUnlocked(ctx, input.securityTier);
         // Réécrit sous le codec de son domicile : un compte projeté chiffré
         // avec la clé d'ici deviendrait illisible chez lui, donc pour tout le
@@ -445,10 +446,10 @@ export const mailOAuthStartFeature = defineSdkFeature<
         if (!isOAuthConfigured(input.provider)) {
             throw new FeatureError('validation', `OAuth ${input.provider} n'est pas configuré sur ce serveur`);
         }
-        assertTierAllowed(ctx, input.securityTier);
         // Renouvellement : la boîte est vérifiée ICI, pendant qu'on a la session
         // et ses droits. La route de callback n'en a plus, elle ne fera que
         // reprendre l'identifiant que ce ticket scelle.
+        let current: MailSecurityTier | undefined;
         if (input.accountId !== null) {
             const account = await ctx.repo.accounts.findById(input.accountId, ctx.workspaceId);
             if (!account) throw new FeatureError('not_found', 'Boîte introuvable');
@@ -456,7 +457,9 @@ export const mailOAuthStartFeature = defineSdkFeature<
             if (account.auth_method === 'password') {
                 throw new FeatureError('validation', 'Cette boîte utilise une connexion manuelle : rien à reconnecter');
             }
+            current = account.security_tier;
         }
+        await assertTierAllowed(ctx, input.securityTier, current);
         const state = await ctx.secrecy.ticket(
             {
                 provider: input.provider,

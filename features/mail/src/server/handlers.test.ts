@@ -348,6 +348,44 @@ describe('mail.accountAdd : les deux paliers', () => {
         assert.equal(repo.accountRows.length, 0);
     });
 
+    it('un compte gardé est refusé sans chiffrement par mot de passe ; une boîte déjà gardée se règle encore', async () => {
+        const repo = fakeRepo();
+        const bare = createTestContext({ repo, passwordProtected: false });
+        await assert.rejects(
+            handlerFor(mailAccountAdd)(bare, { draft: { ...DRAFT, securityTier: 'guarded' } }),
+            /Activez d’abord le chiffrement par mot de passe/
+        );
+        assert.equal(repo.accountRows.length, 0);
+
+        // Née quand le mot de passe gardait la clé, qui ne la garde plus : son nom se change toujours.
+        const added = await handlerFor(mailAccountAdd)(createTestContext({ repo }), {
+            draft: { ...DRAFT, securityTier: 'guarded' }
+        });
+        const renamed = await handlerFor(mailAccountSetProfile)(bare, {
+            id: added.account.id,
+            displayName: 'Autre nom',
+            securityTier: 'guarded',
+            syncIntervalMinutes: 10
+        });
+        assert.equal(renamed.account.displayName, 'Autre nom');
+        // Rouverte, elle ne redevient protégée qu'une fois le chiffrement réactivé.
+        await handlerFor(mailAccountSetProfile)(bare, {
+            id: added.account.id,
+            displayName: 'Autre nom',
+            securityTier: 'open',
+            syncIntervalMinutes: 10
+        });
+        await assert.rejects(
+            handlerFor(mailAccountSetProfile)(bare, {
+                id: added.account.id,
+                displayName: 'Autre nom',
+                securityTier: 'guarded',
+                syncIntervalMinutes: 10
+            }),
+            /Activez d’abord le chiffrement par mot de passe/
+        );
+    });
+
     it('un compte gardé s’écrit sous le codec gardé dans un espace personnel', async () => {
         const repo = fakeRepo();
         const ctx = tagging(createTestContext({ repo, kind: 'personal' }));
