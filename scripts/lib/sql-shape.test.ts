@@ -269,6 +269,45 @@ describe('readSql : les écritures', () => {
     });
 });
 
+describe('readSql : un morceau calculé', () => {
+    const where = (sql: string): unknown => shape(select(sql)[0].cond);
+
+    it('se tolère dans la liste rendue, un SET, des valeurs et un tri', () => {
+        assert.deepEqual(where('SELECT __DYNAMIC__ FROM notes WHERE workspace_id = ? ORDER BY __DYNAMIC__'), {
+            and: ['.workspace_id = ?0']
+        });
+        assert.deepEqual(shape(write('UPDATE notes SET __DYNAMIC__ WHERE id = ? AND workspace_id = ?').cond), {
+            and: [{ and: ['.id = ?0', '.workspace_id = ?1'] }]
+        });
+        assert.equal(readSql('INSERT INTO notes (workspace_id, content) VALUES __DYNAMIC__').kind, 'insert');
+    });
+
+    it('rend opaque la condition qu’il touche, mais pas celle qui l’enferme entre parenthèses', () => {
+        assert.deepEqual(where('SELECT * FROM notes WHERE workspace_id = ? __DYNAMIC__'), { and: ['opaque'] });
+        assert.deepEqual(where('SELECT * FROM notes WHERE workspace_id = ? AND __DYNAMIC__'), { and: ['opaque'] });
+        assert.deepEqual(where('SELECT * FROM notes WHERE workspace_id = ? AND (__DYNAMIC__)'), {
+            and: [{ and: ['.workspace_id = ?0', 'opaque'] }]
+        });
+    });
+
+    for (const sql of [
+        '__DYNAMIC__',
+        'SELECT * FROM __DYNAMIC__ WHERE workspace_id = ?',
+        'SELECT * FROM notes __DYNAMIC__',
+        'SELECT * FROM notes n __DYNAMIC__ WHERE n.workspace_id = ?',
+        'SELECT a __DYNAMIC__',
+        'UPDATE __DYNAMIC__ SET a = ? WHERE workspace_id = ?',
+        'DELETE FROM __DYNAMIC__ WHERE workspace_id = ?',
+        'INSERT INTO __DYNAMIC__ (workspace_id) VALUES (?)',
+        'INSERT INTO notes (__DYNAMIC__) VALUES (?)',
+        'ALTER TABLE __DYNAMIC__ ADD COLUMN x INT'
+    ]) {
+        it(`ne lit pas « ${sql} »`, () => {
+            assert.throws(() => readSql(sql), UnreadSql);
+        });
+    }
+});
+
 describe('readSql : ce qu’il ne lit pas', () => {
     for (const sql of [
         'SELECT * FROM a RIGHT JOIN b ON b.id = a.b_id',

@@ -1,0 +1,52 @@
+{
+  "exempt": {
+    "src/server/repo.ts#destById": {
+      "kind": "row",
+      "reason": "La destination que le dépôt vient d'insérer, ou de modifier par une écriture bornée à l'espace."
+    },
+    "src/server/repo.ts#jobById": {
+      "kind": "row",
+      "reason": "Le travail que le dépôt vient d'insérer, ou de modifier par une écriture bornée à l'espace."
+    },
+    "src/server/repo.ts#findDestinationForJob": {
+      "kind": "row",
+      "reason": "Le travail vient d'être relu visible depuis l'espace de l'appelant (loadJob, loadHomeJob), ou relevé par l'ordonnanceur."
+    },
+    "src/server/repo.ts#recordDestinationProbe": {
+      "kind": "row",
+      "reason": "Le contrôle écrit son verdict sur la destination que la commande vient de relire dans l'espace de l'appelant (loadDestination)."
+    },
+    "src/server/repo.ts#countJobsUsing": {
+      "kind": "row",
+      "reason": "La destination vient d'être relue dans l'espace de l'appelant (loadDestination)."
+    },
+    "src/server/repo.ts#listJobsDue": {
+      "kind": "service",
+      "reason": "L'ordonnanceur relève les travaux dus de tous les espaces."
+    },
+    "src/server/repo.ts#setNextRun": {
+      "kind": "service",
+      "reason": "L'ordonnanceur repousse l'échéance du travail qu'il vient de relever."
+    },
+    "src/server/repo.ts#finishRun": {
+      "kind": "row",
+      "reason": "Le moteur solde l'exécution qu'il vient d'ouvrir (startRun) pour un travail relu visible depuis l'espace de l'appelant ou relevé par l'ordonnanceur."
+    },
+    "src/server/repo.ts#listRunsToPrune": {
+      "kind": "row",
+      "reason": "La rétention suit une sauvegarde réussie du travail, relu visible depuis l'espace de l'appelant (loadJob) ou relevé par l'ordonnanceur."
+    },
+    "src/server/repo.ts#listRunsPresent": {
+      "kind": "row",
+      "reason": "Le travail vient d'être relu chez lui, dans l'espace de l'appelant (loadHomeJob)."
+    },
+    "src/server/repo.ts#markPruned": {
+      "kind": "row",
+      "reason": "L'archive effacée est celle d'une exécution du travail que l'appelant vient de relire chez lui (loadHomeJob), ou que la rétention suit après une sauvegarde."
+    },
+    "src/server/repo.ts#failStaleRuns": {
+      "kind": "service",
+      "reason": "Au démarrage, le moteur solde les exécutions restées en cours dans tous les espaces."
+    }
+  }
+}

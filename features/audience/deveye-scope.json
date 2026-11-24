@@ -1,0 +1,102 @@
+{
+  "tables": {
+    "ft_audience_submissions": {
+      "class": "child",
+      "parents": {
+        "site_id": "audience_sites"
+      }
+    }
+  },
+  "keys": {
+    "audience_sites": {
+      "columns": ["public_key"],
+      "reason": "La clé publique d'un site, tirée au hasard et unique dans l'instance : la balise et les formulaires qui la portent écrivent dans ce site."
+    }
+  },
+  "exempt": {
+    "src/server/move.ts#nameTaken": {
+      "kind": "row",
+      "reason": "Le déplacement a relu le site dans l'espace de l'appelant (loadHome) avant d'en demander le plan, et seul son condensé de nom est comparé à ceux de la cible."
+    },
+    "src/server/repo.ts#breakdown": {
+      "kind": "bounded",
+      "reason": "Le site vient d'être relu, de l'espace de l'appelant ou par un partage (loadSite) : la requête se borne à son site_id, seule la colonne jointe est calculée."
+    },
+    "src/server/repo.ts#listForMaintenance": {
+      "kind": "service",
+      "reason": "Le ménage horaire relève les sites de tous les espaces qui ont des mesures ou des retours."
+    },
+    "src/server/repo.ts#removeFunnel": {
+      "kind": "row",
+      "reason": "L'entonnoir vient d'être relu par la jointure à son site, dans l'espace de l'appelant (findFunnelInWorkspace)."
+    },
+    "src/server/repo.ts#renameFunnel": {
+      "kind": "row",
+      "reason": "L'entonnoir vient d'être relu par la jointure à son site, dans l'espace de l'appelant (findFunnelInWorkspace)."
+    },
+    "src/server/repo.ts#setSessionIdentity": {
+      "kind": "service",
+      "reason": "La vidange de l'ingestion écrit sur la visite qu'elle vient de relire ou d'ouvrir dans le site de la clé publique."
+    },
+    "src/server/repo.ts#touchSession": {
+      "kind": "service",
+      "reason": "La vidange de l'ingestion écrit sur la visite qu'elle vient de relire ou d'ouvrir dans le site de la clé publique."
+    },
+    "src/server/repo.ts#touchSite": {
+      "kind": "service",
+      "reason": "La vidange de l'ingestion date le site que la clé publique de l'événement a désigné."
+    },
+    "src/server/repoForms.ts#bumpFormReceived": {
+      "kind": "row",
+      "reason": "Le formulaire est celui du retour que la commande vient de relire, son site confronté à l'espace de l'appelant (loadHomeSite)."
+    },
+    "src/server/repoForms.ts#bumpFormSubmissions": {
+      "kind": "row",
+      "reason": "Le formulaire est celui d'un retour déjà relu : par la commande, son site confronté à l'espace de l'appelant (loadHomeSite), ou par la rétention sur le site qu'elle balaie."
+    },
+    "src/server/repoForms.ts#clearForm": {
+      "kind": "row",
+      "reason": "Le formulaire vient d'être relu et son site confronté à l'espace de l'appelant, chez lui seulement (loadHomeForm)."
+    },
+    "src/server/repoForms.ts#closeForm": {
+      "kind": "row",
+      "reason": "La réception publique ferme le formulaire qu'elle vient de relire par son nom, dans le site de la clé publique."
+    },
+    "src/server/repoForms.ts#dropAnswerIfEmpty": {
+      "kind": "row",
+      "reason": "Le libellé vient d'être relu par son formulaire (findFormLabel), celui d'un retour que la commande ou la rétention a déjà relu."
+    },
+    "src/server/repoForms.ts#findForm": {
+      "kind": "lookup",
+      "reason": "Le formulaire se lit par son identifiant, et la commande confronte son site à l'espace de l'appelant (loadSite) avant d'y toucher."
+    },
+    "src/server/repoForms.ts#findSubmission": {
+      "kind": "lookup",
+      "reason": "Le retour se lit par son identifiant, et la commande confronte son site à l'espace de l'appelant (loadHomeSite) avant d'y toucher."
+    },
+    "src/server/repoForms.ts#listSubmissions": {
+      "kind": "bounded",
+      "reason": "Le formulaire vient d'être relu et son site confronté à l'espace de l'appelant (loadForm) : la requête se borne à son form_id, seul le curseur est calculé."
+    },
+    "src/server/repoForms.ts#pruneBans": {
+      "kind": "service",
+      "reason": "Le ménage horaire retire les mises à l'écart échues de tous les sites."
+    },
+    "src/server/repoForms.ts#removeForm": {
+      "kind": "row",
+      "reason": "Le formulaire vient d'être relu et son site confronté à l'espace de l'appelant, chez lui seulement (loadHomeForm)."
+    },
+    "src/server/repoForms.ts#removeSubmission": {
+      "kind": "row",
+      "reason": "Le retour vient d'être relu : par la commande, son site confronté à l'espace de l'appelant (loadHomeSite), ou par la rétention sur le site qu'elle balaie."
+    },
+    "src/server/repoForms.ts#touchForm": {
+      "kind": "row",
+      "reason": "La réception publique compte le retour sur le formulaire qu'elle vient de relire par son nom, dans le site de la clé publique."
+    },
+    "src/server/repoForms.ts#updateForm": {
+      "kind": "row",
+      "reason": "Le formulaire vient d'être relu et son site confronté à l'espace de l'appelant, chez lui seulement (loadHomeForm)."
+    }
+  }
+}

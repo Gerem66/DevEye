@@ -51,7 +51,9 @@ and automated scanner output without a working proof.
 Every push runs the unit tests of the server, the client, the modules and the
 agent; a test that checks every query of the core repositories against the
 guard it declares (workspace, account, device); a check that prepares, on a
-throwaway MySQL database, every SQL statement the server can send; a pass
+throwaway MySQL database, every SQL statement the server can send, then reads
+each one again and rejects any that names a workspace table without bounding
+it to a workspace, unless a written exemption gives the reason; a pass
 that opens every module in a real browser; and the journeys of the "Tests and
 debugging" page, played by throwaway accounts against a server started for the
 occasion: signing up and deleting an account, a workspace shared by two, two-

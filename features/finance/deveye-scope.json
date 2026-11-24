@@ -1,0 +1,38 @@
+{
+  "tables": {},
+  "keys": {},
+  "exempt": {
+    "src/server/repo.ts#countProviderConnections": {
+      "kind": "instance",
+      "reason": "La page Services externes, réservée à l'administrateur, compte les connexions d'un fournisseur dans toute l'instance."
+    },
+    "src/server/repo.ts#countTransactions": {
+      "kind": "bounded",
+      "reason": "Exécute la clause de whereOf, qui commence toujours par t.workspace_id = ?."
+    },
+    "src/server/repo.ts#listDeclaring": {
+      "kind": "service",
+      "reason": "Le rappel de déclaration relève les micro-entreprises de tous les espaces."
+    },
+    "src/server/repo.ts#listDueConnections": {
+      "kind": "service",
+      "reason": "La relève bancaire prend les connexions dues de tous les espaces."
+    },
+    "src/server/repo.ts#listExpiringConnections": {
+      "kind": "service",
+      "reason": "L'avis d'expiration relève les consentements bancaires qui finissent, dans tous les espaces."
+    },
+    "src/server/repo.ts#listLines": {
+      "kind": "bounded",
+      "reason": "La clause s'assemble dans la fonction et commence toujours par l.workspace_id = ?."
+    },
+    "src/server/repo.ts#listTransactions": {
+      "kind": "bounded",
+      "reason": "Exécute la clause de whereOf, qui commence toujours par t.workspace_id = ?."
+    },
+    "src/server/repo.ts#sumTransactions": {
+      "kind": "bounded",
+      "reason": "Exécute la clause de whereOf, qui commence toujours par t.workspace_id = ?."
+    }
+  }
+}

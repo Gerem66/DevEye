@@ -1,0 +1,16 @@
+{
+  "exempt": {
+    "src/server/repo.ts#countSignatures": {
+      "kind": "row",
+      "reason": "Les signatures du compte appelant (ctx.userId), rangées dans son espace personnel."
+    },
+    "src/server/repo.ts#removeSignature": {
+      "kind": "row",
+      "reason": "La signature ne part que si elle est au compte appelant (ctx.userId), dans son espace personnel."
+    },
+    "src/server/repo.ts#signatures": {
+      "kind": "row",
+      "reason": "Les signatures du compte appelant (ctx.userId), rangées dans son espace personnel."
+    }
+  }
+}

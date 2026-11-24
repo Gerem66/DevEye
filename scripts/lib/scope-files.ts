@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { readFeatureConfig, resolveModuleDir } from './features-config';
-import { scopeFileSchema, type Exemption, type TableDeclaration } from './query-scope';
+import { scopeFileSchema, type Exemption, type KeyDeclaration, type TableDeclaration } from './query-scope';
 
 /** Un dépôt de requêtes et sa déclaration de cloisonnement : le socle, ou un module installé. */
 export interface ScopeRoot {
@@ -48,9 +48,11 @@ export function rootOf(file: string, roots: readonly ScopeRoot[]): ScopeRoot | n
  */
 export function loadScopeFiles(roots: readonly ScopeRoot[]): {
     declared: Map<string, TableDeclaration>;
+    keys: Map<string, KeyDeclaration>;
     problems: string[];
 } {
     const declared = new Map<string, TableDeclaration>();
+    const keys = new Map<string, KeyDeclaration>();
     const owners = new Map<string, string>();
     const problems: string[] = [];
     for (const root of roots) {
@@ -77,7 +79,11 @@ export function loadScopeFiles(roots: readonly ScopeRoot[]): {
                 declared.set(table, declaration);
             }
         }
+        for (const [table, key] of Object.entries(parsed.data.keys)) {
+            if (keys.has(table)) problems.push(`${where} : les clés de « ${table} » sont déjà déclarées ailleurs`);
+            else keys.set(table, key);
+        }
         for (const [key, exemption] of Object.entries(parsed.data.exempt)) root.exempt.set(key, exemption);
     }
-    return { declared, problems };
+    return { declared, keys, problems };
 }

@@ -234,40 +234,83 @@ Il couvre aussi les modules privés installés par `features.local.json`. Un SQL
 assemblé à l'exécution n'est pas vérifié (`--verbose` le liste) ; un appel
 qu'il ne sait pas préparer s'écarte par `// check-queries: ignore <raison>`.
 
-`npm run check:queries -- --scope-report` lit les mêmes requêtes pour une autre
-question : chaque table qu'elles citent est-elle bornée ? Un
-`AND workspace_id = ?` oublié n'échoue nulle part, la requête rend simplement
-les lignes des autres espaces.
+Il relit ensuite chaque requête pour son **cloisonnement** : les tables qu'elle
+cite sont-elles bornées ? Un `AND workspace_id = ?` oublié n'échoue nulle part,
+la requête rend simplement les lignes des autres espaces. Le contrôle
+s'applique au socle, aux modules du dépôt, et à tout autre module qui a son
+`deveye-scope.json`.
 
 - Une table qui porte `workspace_id` demande un prédicat sur cette colonne, ou
   la colonne dans la liste d'un `INSERT`.
 - Une table qu'une clé étrangère mène à une telle table se borne par cette clé,
   ou par une jointure à des lignes déjà bornées.
+- Un `OR` ne borne que si chacune de ses branches borne. C'est ce qui laisse
+  passer le partage : `workspace_id = ? OR EXISTS (… item_shares …)`, où le
+  partage est lui-même borné à l'espace de l'appelant.
 - Relire par `WHERE id = ?` la ligne qu'on vient d'insérer (`insertId`) est
-  admis.
-- Les autres tables se déclarent dans le `deveye-scope.json` du module
-  (`src/db/scope.json` pour le socle) : `account` avec les colonnes qui la
-  bornent, `child` avec un parent que le schéma ne dit pas, `instance` avec sa
-  raison.
+  admis ; une table jointe par sa clé (`LEFT JOIN users u ON u.id = n.user_id`)
+  suit le sort de celle qui la nomme.
+- Un morceau de SQL assemblé à l'exécution se tolère dans la liste rendue, un
+  `SET`, des valeurs ou un tri. Dans une condition, il rend tout son niveau
+  illisible, parce qu'il peut commencer par `OR` : écrire
+  `WHERE workspace_id = ? AND (${filtres})`, les parenthèses le contiennent.
+  Une table calculée (`FROM ${table}`) n'est pas lue du tout.
 
-Le même fichier dispense une fonction, par sa clé `fichier#fonction`, un `kind`
-(`service`, `token`, `row` ou `instance`) et une raison :
+Ce que la base ne dit pas se déclare dans le `deveye-scope.json` du module
+(`src/db/scope.json` pour le socle) :
 
 ```json
 {
     "tables": {
         "ft_demo_prefs": { "class": "account", "columns": ["user_id"] },
+        "ft_demo_events": { "class": "child", "parents": { "site_id": "ft_demo_sites" } },
         "ft_demo_catalog": { "class": "instance", "reason": "Un catalogue commun à l'instance." }
     },
+    "keys": {
+        "ft_demo_pages": {
+            "columns": ["public_ref"],
+            "reason": "La référence publique d'une page : qui la tient lit la page."
+        }
+    },
     "exempt": {
-        "src/server/repo.ts#listDue": { "kind": "service", "reason": "Le planificateur lit tous les espaces." }
+        "src/server/repo.ts#listDue": {
+            "kind": "service",
+            "reason": "Le planificateur relève les sauvegardes dues de tous les espaces."
+        }
     }
 }
 ```
 
-Le rapport compte par dépôt et ne fait rien échouer ; `--verbose` nomme chaque
-requête, sa fonction et ce qui lui manque. Une requête qu'il ne sait pas lire
-est comptée « non analysée », jamais tenue pour saine.
+- `tables` : la classe d'une table qui ne porte pas `workspace_id`. `account`
+  avec les colonnes qui la bornent, `child` avec un parent que le schéma ne dit
+  pas par une clé étrangère, `instance` avec sa raison.
+- `keys` : des colonnes qui désignent une ligne à elles seules, sur une table
+  bornée. Un secret que seul son porteur détient (un jeton, une référence
+  publique tirée au hasard) ou une clé unique que la requête apporte (un nom
+  d'hôte). Jamais `id` ni une colonne qu'un membre d'un autre espace devine.
+- `exempt` : une fonction dont une requête n'est pas bornée, par sa clé
+  `fichier#fonction`, avec un genre et une raison. La fonction se nomme comme
+  dans son fichier, précédée des objets qui la portent (`folders.findById`,
+  `removeFeature.handler`) ; `--scope-report --verbose` donne la clé exacte.
+  Une requête passée par une aide (`one(sql, params)`) se juge à chaque appel
+  de l'aide, sous la clé de la fonction qui l'écrit.
+
+| Genre      | Ce qu'il affirme                                                                                          |
+| ---------- | --------------------------------------------------------------------------------------------------------- |
+| `service`  | un service de fond lit ou écrit pour tous les espaces                                                     |
+| `instance` | une lecture d'administration ou d'exploitation                                                            |
+| `token`    | un secret désigne la ligne                                                                                |
+| `row`      | l'identifiant vient d'une ligne que l'appelant a déjà lue par une requête bornée                          |
+| `lookup`   | la ligne n'est lue que pour remonter à l'élément dont l'accès se vérifie ensuite, et rien n'en sort avant |
+| `bounded`  | la requête est bornée dans son texte, que l'outil ne sait pas lire : la raison dit par quoi               |
+| `relay`    | la fonction exécute une requête écrite ailleurs, jugée là où elle est écrite                              |
+
+Une dispense qui ne couvre plus rien fait échouer le contrôle, comme une table
+sans classe. `npm run check:queries -- --scope-report --verbose` compte par
+dépôt et nomme chaque requête, sa fonction et ce qui lui manque, sans rien
+préparer ni faire échouer. Avant d'écrire une dispense `row`, ajouter le
+prédicat quand l'appelant a l'espace sous la main : c'est lui qui tient si un
+contrôle d'accès manque un jour plus haut.
 
 Jamais `npx eslint .` à la racine de `DevEye/` : `npm run lint`,
 `npm run lint:features`, et dans `client/` `npm run lint`. Prettier couvre

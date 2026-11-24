@@ -3,6 +3,8 @@ import ts from 'typescript';
 
 import { selectColumns } from '@/db/columns';
 
+import { DYNAMIC_SQL } from './sql-shape';
+
 /**
  * La logique de `check-queries`, sans base ni programme TS à elle : le texte
  * SQL tiré de l'AST, ce que mysql2 rend pour une colonne préparée, et la règle
@@ -84,37 +86,72 @@ function isSelectColumns(callee: ts.Expression, checker: ts.TypeChecker): boolea
     );
 }
 
+export interface VariantOptions {
+    /**
+     * Un morceau qui ne se réduit pas devient `DYNAMIC_SQL` au lieu de tout
+     * faire échouer : le texte ne se prépare plus, mais sa forme se lit encore
+     * autour du morceau.
+     */
+    tolerant?: boolean;
+    /** Ce que vaut un paramètre de fonction, quand on lit la requête depuis l'un de ses appels. */
+    bindings?: ReadonlyMap<ts.Symbol, ts.Expression>;
+    /** Reçoit les paramètres de fonction dont le texte dépend : le SQL vient alors de l'appelant. */
+    parameters?: Set<ts.ParameterDeclaration>;
+}
+
 /**
  * Les textes SQL qu'une expression peut valoir : un par branche de ternaire ou
  * par membre d'une union de littéraux. Lève `DynamicSql` sur ce qui ne se
  * réduit pas (une clause construite à la main, un nom de table calculé).
  */
-export function sqlVariants(expr: ts.Expression, checker: ts.TypeChecker, seen = new Set<ts.Node>()): string[] {
+export function sqlVariants(
+    expr: ts.Expression,
+    checker: ts.TypeChecker,
+    options: VariantOptions = {},
+    seen = new Set<ts.Node>()
+): string[] {
     const node = unwrap(expr);
     if (seen.has(node)) throw new DynamicSql(node);
     seen.add(node);
     try {
-        return evaluate(node, checker, seen);
+        return evaluate(node, checker, seen, options);
     } finally {
         seen.delete(node);
     }
 }
 
-function evaluate(node: ts.Expression, checker: ts.TypeChecker, seen: Set<ts.Node>): string[] {
-    const recurse = (e: ts.Expression): string[] => sqlVariants(e, checker, seen);
+function evaluate(node: ts.Expression, checker: ts.TypeChecker, seen: Set<ts.Node>, options: VariantOptions): string[] {
+    const recurse = (e: ts.Expression): string[] => sqlVariants(e, checker, options, seen);
+    /** Un morceau d'un texte plus grand : le seul endroit où l'inconnu se tolère. */
+    const part = (e: ts.Expression): string[] => {
+        if (!options.tolerant) return recurse(e);
+        try {
+            return recurse(e);
+        } catch (err) {
+            // Trop de variantes : c'est la requête entière qui ne se lit plus.
+            if (!(err instanceof DynamicSql) || err.node === null) throw err;
+            return [` ${DYNAMIC_SQL} `];
+        }
+    };
+
+    if (ts.isIdentifier(node)) {
+        const symbol = checker.getSymbolAtLocation(node);
+        const bound = symbol && options.bindings?.get(symbol);
+        if (bound) return recurse(bound);
+    }
 
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text];
     if (ts.isNumericLiteral(node)) return [node.text];
     if (ts.isTemplateExpression(node)) {
         let acc = [node.head.text];
-        for (const span of node.templateSpans) acc = cross(acc, recurse(span.expression), span.literal.text);
+        for (const span of node.templateSpans) acc = cross(acc, part(span.expression), span.literal.text);
         return acc;
     }
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-        return cross(recurse(node.left), recurse(node.right));
+        return cross(part(node.left), part(node.right));
     }
     if (ts.isConditionalExpression(node)) {
-        return [...new Set([...recurse(node.whenTrue), ...recurse(node.whenFalse)])];
+        return [...new Set([...part(node.whenTrue), ...part(node.whenFalse)])];
     }
 
     const type = checker.getTypeAtLocation(node);
@@ -129,6 +166,7 @@ function evaluate(node: ts.Expression, checker: ts.TypeChecker, seen: Set<ts.Nod
             if (ts.isVariableDeclarationList(list) && list.flags & ts.NodeFlags.Const) return recurse(decl.initializer);
         }
         if (decl && ts.isPropertyAssignment(decl)) return recurse(decl.initializer);
+        if (decl && ts.isParameter(decl)) options.parameters?.add(decl);
         throw new DynamicSql(node);
     }
 

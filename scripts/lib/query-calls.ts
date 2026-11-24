@@ -120,23 +120,77 @@ function bare(node: ts.Expression): ts.Expression {
     return n;
 }
 
+type FunctionNode = ts.FunctionDeclaration | ts.MethodDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+
+function isFunctionNode(n: ts.Node): n is FunctionNode {
+    return (
+        ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n)
+    );
+}
+
+/** Le nœud qui nomme une fonction : son propre nom, ou la constante ou la propriété qui la porte. */
+function nameNode(fn: FunctionNode): ts.Node | null {
+    if (!ts.isArrowFunction(fn) && fn.name) return fn.name;
+    if (ts.isFunctionDeclaration(fn) || ts.isMethodDeclaration(fn)) return null;
+    const holder = fn.parent;
+    return ts.isVariableDeclaration(holder) || ts.isPropertyAssignment(holder) ? holder.name : null;
+}
+
+/** La fonction nommée la plus proche qui contient ce nœud. */
+export function namedFunction(node: ts.Node): FunctionNode | null {
+    for (let n = node.parent; !ts.isSourceFile(n); n = n.parent) {
+        if (isFunctionNode(n) && nameNode(n)) return n;
+    }
+    return null;
+}
+
 /**
- * La fonction nommée qui porte un appel : une méthode, une fonction, ou la
- * constante à laquelle une fonction fléchée est affectée. Une fonction passée
- * en argument (le corps d'une transaction, d'un `map`) n'a pas de nom : c'est
- * celle qui l'entoure. `<module>` hors de toute fonction.
+ * Le nom d'une fonction dans son fichier : le sien, précédé des objets qui la
+ * portent jusqu'à la fonction qui les entoure (`folders.findById`,
+ * `removeFeature.handler`). Deux méthodes de même nom dans deux objets d'un
+ * même dépôt ne se confondent pas.
+ */
+function qualifiedName(fn: FunctionNode): string {
+    const own = nameNode(fn);
+    const names = [own ? own.getText() : ''];
+    const start = own && own.parent !== fn ? own.parent : fn;
+    for (let n = start.parent; !ts.isSourceFile(n) && !isFunctionNode(n); n = n.parent) {
+        if (ts.isPropertyAssignment(n) || ts.isVariableDeclaration(n)) names.unshift(n.name.getText());
+    }
+    return names.join('.');
+}
+
+/**
+ * La fonction nommée qui porte un appel, telle qu'une dispense la désigne. Une
+ * fonction passée en argument (le corps d'une transaction, d'un `map`) n'a pas
+ * de nom : c'est celle qui l'entoure. `<module>` hors de toute fonction.
  */
 export function enclosingFunction(node: ts.Node): string {
-    for (let n = node.parent; !ts.isSourceFile(n); n = n.parent) {
-        if ((ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n) || ts.isFunctionExpression(n)) && n.name) {
-            return n.name.getText();
+    const fn = namedFunction(node);
+    return fn ? qualifiedName(fn) : '<module>';
+}
+
+/** Le symbole sous lequel une fonction s'appelle. */
+export function functionSymbol(fn: ts.Node, checker: ts.TypeChecker): ts.Symbol | undefined {
+    const name = isFunctionNode(fn) ? nameNode(fn) : null;
+    return name ? checker.getSymbolAtLocation(name) : undefined;
+}
+
+/** Chaque appel des fichiers contrôlés, rangé par la fonction appelée. */
+export function callsBySymbol(program: ts.Program, workspace: string): Map<ts.Symbol, ts.CallExpression[]> {
+    const checker = program.getTypeChecker();
+    const out = new Map<ts.Symbol, ts.CallExpression[]>();
+    const visit = (node: ts.Node): void => {
+        if (ts.isCallExpression(node)) {
+            const callee = ts.isPropertyAccessExpression(node.expression) ? node.expression.name : node.expression;
+            let symbol = checker.getSymbolAtLocation(callee);
+            if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+            if (symbol) out.set(symbol, [...(out.get(symbol) ?? []), node]);
         }
-        if (ts.isArrowFunction(n) || ts.isFunctionExpression(n)) {
-            const holder = n.parent;
-            if (ts.isVariableDeclaration(holder) || ts.isPropertyAssignment(holder)) return holder.name.getText();
-        }
-    }
-    return '<module>';
+        ts.forEachChild(node, visit);
+    };
+    for (const sf of program.getSourceFiles()) if (isChecked(program, sf, workspace)) visit(sf);
+    return out;
 }
 
 /**
@@ -156,9 +210,15 @@ export function isInsertId(expr: ts.Expression, checker: ts.TypeChecker): boolea
     return isInsertId(decl.initializer, checker);
 }
 
-/** Le paramètre de ce rang, quand les paramètres sont un tableau littéral sans étalement avant lui. */
-export function paramAt(call: ts.CallExpression, index: number): ts.Expression | null {
-    const array = paramArray(call);
-    if (!array || array.elements.slice(0, index + 1).some(ts.isSpreadElement)) return null;
+/** Le paramètre de ce rang, quand `params` est un tableau littéral sans étalement avant lui. */
+export function paramOf(params: ts.Expression | undefined, index: number): ts.Expression | null {
+    const array = params ? bare(params) : undefined;
+    if (!array || !ts.isArrayLiteralExpression(array)) return null;
+    if (array.elements.slice(0, index + 1).some(ts.isSpreadElement)) return null;
     return array.elements[index] ?? null;
+}
+
+/** Le paramètre de ce rang de l'appel. */
+export function paramAt(call: ts.CallExpression, index: number): ts.Expression | null {
+    return paramOf(call.arguments[1], index);
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+    callVerdict,
     classifyTables,
     scopeFileSchema,
     scopeFindings,
@@ -55,9 +56,14 @@ const findings = (sql: string, rowId?: (param: number) => boolean): string[] =>
 
 describe('classifyTables', () => {
     it('range une table qui porte son espace, et ses filles de proche en proche', () => {
-        assert.deepEqual(SCOPES.get('notes'), { class: 'direct', columns: ['workspace_id'], joins: ['folder_id'] });
-        assert.deepEqual(SCOPES.get('note_tags'), { class: 'child', columns: ['note_id'], joins: [] });
-        assert.deepEqual(SCOPES.get('tag_votes'), { class: 'child', columns: ['tag_id'], joins: [] });
+        assert.deepEqual(SCOPES.get('notes'), {
+            class: 'direct',
+            columns: ['workspace_id'],
+            joins: ['folder_id'],
+            keys: []
+        });
+        assert.deepEqual(SCOPES.get('note_tags'), { class: 'child', columns: ['note_id'], joins: [], keys: [] });
+        assert.deepEqual(SCOPES.get('tag_votes'), { class: 'child', columns: ['tag_id'], joins: [], keys: [] });
         assert.deepEqual(SCOPES.get('item_shares')?.columns, ['workspace_id', 'home_workspace_id']);
     });
 
@@ -70,11 +76,7 @@ describe('classifyTables', () => {
 
     it('suit les déclarations, et laisse sans classe ce que rien ne range', () => {
         const { unclassified, problems } = classifyTables(SCHEMA, DECLARED);
-        assert.deepEqual(SCOPES.get('sessions'), {
-            class: 'account',
-            columns: ['user_id'],
-            joins: ['user_id'].slice(1)
-        });
+        assert.deepEqual(SCOPES.get('sessions'), { class: 'account', columns: ['user_id'], joins: [], keys: [] });
         assert.equal(SCOPES.get('instance_settings')?.class, 'instance');
         assert.deepEqual(unclassified, ['catalog', 'events']);
         assert.deepEqual(problems, []);
@@ -86,7 +88,7 @@ describe('classifyTables', () => {
             ['events', { class: 'child', parents: { site_id: 'devices' } }]
         ]);
         const { scopes, problems } = classifyTables(SCHEMA, declared);
-        assert.deepEqual(scopes.get('events'), { class: 'child', columns: ['site_id'], joins: [] });
+        assert.deepEqual(scopes.get('events'), { class: 'child', columns: ['site_id'], joins: [], keys: [] });
         assert.deepEqual(problems, []);
     });
 
@@ -179,11 +181,31 @@ describe('scopeFindings : jointures et sous-requêtes', () => {
         );
     });
 
-    it('relève les deux tables quand la jointure ne mène à aucune borne', () => {
+    it('ne relève que la table qui nomme l’autre, quand la jointure ne mène à aucune borne', () => {
         assert.deepEqual(findings('SELECT t.* FROM note_tags t JOIN notes n ON n.id = t.note_id WHERE n.public = 1'), [
-            'unbounded note_tags',
-            'unbounded notes'
+            'unbounded note_tags'
         ]);
+        assert.deepEqual(
+            findings('SELECT n.*, u.email FROM notes n LEFT JOIN users u ON u.id = n.user_id WHERE n.public = 1'),
+            ['unbounded notes']
+        );
+    });
+
+    it('laisse une table d’instance nommer un compte, pas l’inverse', () => {
+        assert.deepEqual(
+            findings('SELECT s.*, u.email FROM instance_settings s LEFT JOIN users u ON u.id = s.updated_by'),
+            []
+        );
+        assert.deepEqual(findings('SELECT u.* FROM users u JOIN instance_settings s ON s.updated_by = u.id'), [
+            'unbounded users'
+        ]);
+    });
+
+    it('ne laisse pas deux tables se nommer l’une l’autre', () => {
+        assert.deepEqual(
+            findings('SELECT n.* FROM notes n JOIN note_folders f ON f.id = n.folder_id AND n.id = f.name'),
+            ['unbounded notes']
+        );
     });
 
     it('ne borne rien par une jointure sur une colonne quelconque', () => {
@@ -326,7 +348,7 @@ describe('scopeFindings : jointures et sous-requêtes', () => {
             findings(
                 'DELETE m FROM device_metrics m JOIN devices d ON d.id = m.device_id WHERE m.ts < ? - d.retention_days'
             ),
-            ['unbounded device_metrics', 'unbounded devices']
+            ['unbounded device_metrics']
         );
     });
 });
@@ -377,6 +399,48 @@ describe('scopeFindings : les autres classes', () => {
     });
 });
 
+describe('les clés qui désignent une ligne', () => {
+    const KEYS = new Map([
+        ['sessions', { columns: ['token_hash'], reason: 'Le jeton de la session.' }],
+        ['users', { columns: ['email'], reason: 'Une adresse ne désigne qu’un compte.' }],
+        ['devices', { columns: ['id'], reason: 'Un identifiant tiré au hasard.' }]
+    ]);
+    const keyed = classifyTables(SCHEMA, DECLARED, KEYS);
+    const withKeys = (sql: string): string[] =>
+        scopeFindings(sql, SCHEMA, keyed.scopes).map((f) => `${f.kind} ${f.table ?? '-'}`);
+
+    it('bornent comme la colonne de la table', () => {
+        assert.deepEqual(keyed.problems, []);
+        assert.deepEqual(withKeys('SELECT * FROM sessions WHERE token_hash = ?'), []);
+        assert.deepEqual(withKeys('SELECT * FROM users WHERE email = ? OR id = ?'), []);
+        assert.deepEqual(withKeys('UPDATE devices SET retention_days = ? WHERE id = ?'), []);
+        assert.deepEqual(withKeys('SELECT * FROM users WHERE email LIKE ?'), ['unbounded users']);
+    });
+
+    it('ne dispensent pas une insertion de porter la colonne de sa table', () => {
+        assert.deepEqual(withKeys('INSERT INTO sessions (token_hash) VALUES (?)'), ['unbounded sessions']);
+    });
+
+    it('se refusent sur une table inconnue, une table qui n’est pas bornée, une colonne inconnue', () => {
+        const { problems } = classifyTables(
+            SCHEMA,
+            DECLARED,
+            new Map([
+                ['gone', { columns: ['id'], reason: 'x' }],
+                ['instance_settings', { columns: ['k'], reason: 'x' }],
+                ['catalog', { columns: ['id'], reason: 'x' }],
+                ['notes', { columns: ['public_ref'], reason: 'x' }]
+            ])
+        );
+        assert.deepEqual(problems, [
+            '« gone » a des clés déclarées, mais la base ne la connaît pas',
+            "« instance_settings » n'est pas bornée : une clé n'y désigne rien",
+            "« catalog » n'est pas bornée : une clé n'y désigne rien",
+            '« notes » : clé déclarée inconnue (public_ref)'
+        ]);
+    });
+});
+
 describe('scopeFindings : les insertions', () => {
     it('exige la colonne d’espace, ou la clé du parent, dans la liste', () => {
         assert.deepEqual(findings('INSERT INTO notes (workspace_id, content) VALUES (?, ?)'), []);
@@ -409,6 +473,42 @@ describe('scopeFindings : les insertions', () => {
     });
 });
 
+describe('scopeFindings : le SQL assemblé à l’exécution', () => {
+    it('juge ce qui se lit autour d’un morceau calculé', () => {
+        assert.deepEqual(findings('UPDATE notes SET __DYNAMIC__ WHERE id = ? AND workspace_id = ?'), []);
+        assert.deepEqual(findings('UPDATE notes SET __DYNAMIC__ WHERE id = ?'), ['unbounded notes']);
+        assert.deepEqual(findings('SELECT __DYNAMIC__ FROM notes WHERE workspace_id = ? AND (__DYNAMIC__)'), []);
+    });
+
+    it('ne tient pour bornée aucune condition qu’un morceau calculé peut défaire', () => {
+        assert.deepEqual(findings('SELECT * FROM notes WHERE workspace_id = ? __DYNAMIC__'), ['unbounded notes']);
+        assert.deepEqual(findings('SELECT * FROM notes WHERE __DYNAMIC__'), ['unbounded notes']);
+    });
+
+    it('dit non lue une requête dont la table est calculée', () => {
+        assert.deepEqual(findings('DELETE FROM __DYNAMIC__ WHERE workspace_id = ?'), ['unread -']);
+        assert.deepEqual(findings('__DYNAMIC__'), ['unread -']);
+    });
+});
+
+describe('callVerdict', () => {
+    const finding = (kind: 'unbounded' | 'unclassified' | 'unread') => ({ kind, table: null, message: kind });
+
+    it('rend le sort le plus grave', () => {
+        assert.equal(callVerdict([], false), 'bounded');
+        assert.equal(callVerdict([finding('unbounded')], false), 'unbounded');
+        assert.equal(callVerdict([finding('unbounded'), finding('unread')], false), 'unread');
+        assert.equal(callVerdict([finding('unread'), finding('unclassified')], false), 'unclassified');
+    });
+
+    it('laisse une dispense couvrir une table sans borne ou une requête non lue, jamais une table sans classe', () => {
+        assert.equal(callVerdict([finding('unbounded')], true), 'exempt');
+        assert.equal(callVerdict([finding('unread')], true), 'exempt');
+        assert.equal(callVerdict([finding('unbounded'), finding('unclassified')], true), 'unclassified');
+        assert.equal(callVerdict([], true), 'bounded');
+    });
+});
+
 describe('scopeFileSchema', () => {
     it('lit des tables et des dispenses', () => {
         const file = scopeFileSchema.parse({
@@ -421,7 +521,7 @@ describe('scopeFileSchema', () => {
     });
 
     it('rend un fichier vide pour un objet vide', () => {
-        assert.deepEqual(scopeFileSchema.parse({}), { tables: {}, exempt: {} });
+        assert.deepEqual(scopeFileSchema.parse({}), { tables: {}, keys: {}, exempt: {} });
     });
 
     it('refuse une dispense sans raison, une clé sans fonction, une classe inconnue', () => {

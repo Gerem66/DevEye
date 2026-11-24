@@ -1,0 +1,82 @@
+{
+  "tables": {},
+  "keys": {},
+  "exempt": {
+    "src/server/copy.ts#mailCopy.plan": {
+      "kind": "row",
+      "reason": "Le socle n'appelle le plan qu'après avoir établi que le compte a son domicile dans l'espace de l'appelant (loadHome)."
+    },
+    "src/server/repo.ts#countOAuth": {
+      "kind": "instance",
+      "reason": "Le décompte des boîtes reliées par OAuth, pour la page des services externes, réservée à l'administrateur."
+    },
+    "src/server/repo.ts#delete": {
+      "kind": "row",
+      "reason": "Le message vient d'être relu avec son dossier et son compte, visible de l'espace de l'appelant (loadMessageChain)."
+    },
+    "src/server/repo.ts#findById": {
+      "kind": "lookup",
+      "reason": "Le dossier ou le message lu par son identifiant ne sert qu'une fois son compte relu visible de l'espace de l'appelant (findVisible) ; le contrôle d'accès n'en tire que l'identifiant du compte."
+    },
+    "src/server/repo.ts#findByIdUnscoped": {
+      "kind": "service",
+      "reason": "La relève de fond relit un compte qu'elle vient de relever comme dû."
+    },
+    "src/server/repo.ts#listByFolder": {
+      "kind": "bounded",
+      "reason": "Le prédicat folder_id = ? ouvre toujours la clause, assemblée avec le curseur et que l'outil ne lit pas ; le dossier vient d'être relu avec son compte visible (loadFolderWithAccount)."
+    },
+    "src/server/repo.ts#listSyncDue": {
+      "kind": "service",
+      "reason": "La relève de fond relève les comptes dus de tous les espaces."
+    },
+    "src/server/repo.ts#moveFolder": {
+      "kind": "row",
+      "reason": "Le message vient d'être relu avec son compte visible (loadMessageChain), et le dossier d'arrivée appartient au même compte."
+    },
+    "src/server/repo.ts#recordStatus": {
+      "kind": "row",
+      "reason": "Le compte vient d'être relu visible de l'espace de l'appelant (loadAccount), chez lui ou par un partage, ou dans son espace pour un renouvellement OAuth."
+    },
+    "src/server/repo.ts#recordSync": {
+      "kind": "service",
+      "reason": "La relève de fond note l'issue sur le compte qu'elle vient de relever."
+    },
+    "src/server/repo.ts#rename": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être relu avec son compte, visible de l'espace de l'appelant (loadFolderWithAccount)."
+    },
+    "src/server/repo.ts#setFlags": {
+      "kind": "row",
+      "reason": "Le message vient d'être relu avec son dossier et son compte, visible de l'espace de l'appelant (loadMessageChain)."
+    },
+    "src/server/repo.ts#updateCounts": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être relu avec son compte visible, ou listé parmi ceux du compte que la relève traite."
+    },
+    "src/server/repo.ts#updateCredentials": {
+      "kind": "row",
+      "reason": "Le jeton renouvelé se range sur le compte dont les identifiants viennent de servir : relu visible de l'espace de l'appelant, ou relevé par la relève de fond."
+    },
+    "src/server/repo.ts#updateEnvelopeEnc": {
+      "kind": "row",
+      "reason": "Le message vient d'être listé par son dossier, dans le compte dont le palier change."
+    },
+    "src/server/repo.ts#updateFlags": {
+      "kind": "row",
+      "reason": "Le message vient d'être listé par son dossier, dans la fenêtre que la relève réconcilie."
+    },
+    "src/server/repo.ts#updateNameEnc": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être listé parmi ceux du compte dont le palier change."
+    },
+    "src/server/repo.ts#updateSyncError": {
+      "kind": "row",
+      "reason": "Le changement de palier vient de relire le compte dans l'espace de l'appelant, qui est son domicile."
+    },
+    "src/server/repo.ts#upsert": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être relu par son compte et son chemin, dans la même fonction."
+    }
+  }
+}

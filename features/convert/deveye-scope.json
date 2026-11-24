@@ -1,0 +1,56 @@
+{
+  "tables": {
+    "ft_convert_fx_rates": { "class": "instance", "reason": "Les taux de change, communs à toute l'instance." },
+    "ft_convert_fx_state": { "class": "instance", "reason": "L'état de la relève des taux de change." }
+  },
+  "exempt": {
+    "src/server/repo.ts#claimQueued": {
+      "kind": "service",
+      "reason": "La file prend le plus ancien travail en attente, tous espaces confondus."
+    },
+    "src/server/repo.ts#expire": {
+      "kind": "service",
+      "reason": "L'entretien périme les résultats échus et les envois jamais venus de tous les espaces."
+    },
+    "src/server/repo.ts#fail": {
+      "kind": "row",
+      "reason": "Le travail vient d'être pris : par claimForUpload dans l'espace du ticket à la montée, par claimQueued dans la file."
+    },
+    "src/server/repo.ts#finish": {
+      "kind": "service",
+      "reason": "La file clôt le travail qu'elle vient de mener."
+    },
+    "src/server/repo.ts#liveKeys": {
+      "kind": "service",
+      "reason": "Le balayage du stockage lit les travaux vivants de tous les espaces."
+    },
+    "src/server/repo.ts#markLost": {
+      "kind": "row",
+      "reason": "Le travail vient d'être lu : par find dans l'espace du ticket à la descente, par promisingFile à l'entretien."
+    },
+    "src/server/repo.ts#progress": {
+      "kind": "service",
+      "reason": "La file date l'avancement du travail qu'elle vient de prendre."
+    },
+    "src/server/repo.ts#promisingFile": {
+      "kind": "service",
+      "reason": "L'entretien confronte au disque les travaux de tous les espaces qui promettent un fichier."
+    },
+    "src/server/repo.ts#purgeOld": {
+      "kind": "service",
+      "reason": "L'entretien efface les travaux clos anciens de tous les espaces."
+    },
+    "src/server/repo.ts#queue": {
+      "kind": "row",
+      "reason": "La montée vient de prendre le travail par claimForUpload, dans l'espace que porte son ticket."
+    },
+    "src/server/repo.ts#recoverStale": {
+      "kind": "service",
+      "reason": "Au démarrage, le service reprend les travaux qu'un arrêt brutal a laissés en plan, tous espaces confondus."
+    },
+    "src/server/repo.ts#requeue": {
+      "kind": "service",
+      "reason": "La file rend le travail qu'elle venait de prendre, quand le service s'arrête."
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "tables": {
+    "ft_whiteboard_key": {
+      "class": "instance",
+      "reason": "La clé scellée du module."
+    }
+  },
+  "exempt": {
+    "src/server/repo.ts#boards.findById": {
+      "kind": "row",
+      "reason": "Le tableau vient d'être relu visible de l'espace de l'appelant (loadBoard) ou chez lui par le déplacement du partage (loadHome), ou créé par le parcours d'essai qui le relit."
+    },
+    "src/server/repo.ts#boards.loadScene": {
+      "kind": "row",
+      "reason": "Le tableau vient d'être relu visible de l'espace de l'appelant (loadBoard) pour la copie ou l'entrée en séance, et la séance ne relit que les tableaux qu'elle tient ouverts."
+    },
+    "src/server/repo.ts#boards.previews": {
+      "kind": "row",
+      "reason": "Les tableaux viennent de listVisible, bornée à l'espace de l'appelant et à ce qui y est projeté."
+    },
+    "src/server/repo.ts#files.allObjectKeys": {
+      "kind": "service",
+      "reason": "Le ménage quotidien confronte les objets stockés aux lignes de tous les tableaux."
+    },
+    "src/server/repo.ts#files.deleteRow": {
+      "kind": "row",
+      "reason": "La ligne vient d'être insérée par addFile, ou relevée par le ménage du service (orphanedBefore)."
+    },
+    "src/server/repo.ts#files.orphanedBefore": {
+      "kind": "service",
+      "reason": "Le ménage quotidien relève les images orphelines de tous les tableaux."
+    },
+    "src/server/repo.ts#files.totals": {
+      "kind": "instance",
+      "reason": "Les chiffres du module dans la vue d'ensemble de l'administration, réservée à l'administrateur."
+    }
+  }
+}

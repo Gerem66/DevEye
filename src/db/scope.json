@@ -1,0 +1,365 @@
+{
+  "$comment": "Le cloisonnement des requêtes du socle (npm run check:queries, Docs/CREATING_A_FEATURE.md). « tables » : la classe de celles qui ne portent pas workspace_id. « exempt » : les fonctions dont une requête n'est pas bornée, et pourquoi.",
+  "tables": {
+    "_migrations": {
+      "class": "instance",
+      "reason": "Le registre des migrations appliquées."
+    },
+    "debug_runs": {
+      "class": "instance",
+      "reason": "L'historique des essais de la page Tests et débogage, réservée à l'administrateur."
+    },
+    "feature_maintenance": {
+      "class": "instance",
+      "reason": "La maintenance d'une fonctionnalité, pour toute l'instance."
+    },
+    "instance_settings": {
+      "class": "instance",
+      "reason": "Les réglages de l'instance, rangés par origine."
+    },
+    "login_history": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "logs": {
+      "class": "instance",
+      "reason": "Le journal d'audit de l'instance, lu par ses administrateurs."
+    },
+    "password_resets": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "pending_signups": {
+      "class": "instance",
+      "reason": "Une demande d'inscription précède tout compte : seul son jeton la désigne."
+    },
+    "quota_rechecks": {
+      "class": "account",
+      "columns": ["owner_user_id"]
+    },
+    "refresh_tokens": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "remote_instances": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "site_maintenance": {
+      "class": "instance",
+      "reason": "La maintenance du site, pour toute l'instance."
+    },
+    "trusted_browsers": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "user_2fa": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "user_2fa_backup_codes": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "user_phones": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "user_secret_keys": {
+      "class": "account",
+      "columns": ["user_id"]
+    },
+    "users": {
+      "class": "account",
+      "columns": ["id"]
+    },
+    "workspaces": {
+      "class": "account",
+      "columns": ["id", "owner_user_id"]
+    }
+  },
+  "keys": {
+    "device_link_codes": {
+      "columns": ["code"],
+      "reason": "Le code d'appairage, tiré au hasard et à durée courte : qui le présente le détient."
+    },
+    "feature_domains": {
+      "columns": ["host"],
+      "reason": "Un nom d'hôte ne désigne qu'un domaine, et c'est la requête entrante qui l'apporte."
+    },
+    "feedback": {
+      "columns": ["uid"],
+      "reason": "Les retours d'un compte : leur auteur les désigne, quel que soit l'espace d'où il écrivait."
+    },
+    "password_resets": {
+      "columns": ["token_hash"],
+      "reason": "Le condensé du jeton du lien : seul qui a reçu le mail le détient."
+    },
+    "quota_pauses": {
+      "columns": ["owner_user_id"],
+      "reason": "Les pauses d'un compte valent pour tous les espaces qu'il possède."
+    },
+    "refresh_tokens": {
+      "columns": ["jti", "session_id"],
+      "reason": "L'identifiant d'un jeton et celui de sa session sont tirés au hasard : qui les présente en est le porteur."
+    },
+    "trusted_browsers": {
+      "columns": ["token_hash"],
+      "reason": "Le condensé du jeton que le navigateur de confiance garde dans son cookie."
+    },
+    "user_hidden_notices": {
+      "columns": ["user_id"],
+      "reason": "Ce qu'un compte a masqué, dans tous ses espaces."
+    },
+    "users": {
+      "columns": ["email", "username"],
+      "reason": "Une adresse ou un pseudo ne désigne qu'un compte."
+    },
+    "workspace_members": {
+      "columns": ["user_id"],
+      "reason": "Les espaces d'un compte : l'appartenance se lit par le compte comme par l'espace."
+    }
+  },
+  "exempt": {
+    "scripts/export-coverage.ts#q.query": {
+      "kind": "relay",
+      "reason": "Relaie les requêtes du contrôle de l'export, écrites dans Services/accountExport."
+    },
+    "scripts/reseal-server-key.ts#main": {
+      "kind": "instance",
+      "reason": "Un script d'exploitation : il rescelle chaque secret de l'instance, table par table."
+    },
+    "scripts/rotate-server-key.ts#main": {
+      "kind": "instance",
+      "reason": "Un script d'exploitation : il rescelle chaque secret de l'instance, table par table."
+    },
+    "scripts/uninstall-feature.ts#main": {
+      "kind": "instance",
+      "reason": "Un script d'exploitation : il retire un module de toute l'instance."
+    },
+    "src/Services/accountExport/run.ts#query": {
+      "kind": "relay",
+      "reason": "Relaie les requêtes d'export, chacune bornée au compte par la déclaration de sa table."
+    },
+    "src/Services/sealTargets.ts#sealedRows": {
+      "kind": "instance",
+      "reason": "La rotation de la clé du serveur relit chaque secret scellé de l'instance."
+    },
+    "src/db/migrate.ts#applyDir": {
+      "kind": "relay",
+      "reason": "Exécute les fichiers de migration."
+    },
+    "src/db/repos/debug.ts#testAccounts": {
+      "kind": "instance",
+      "reason": "Le ménage des essais cherche les comptes d'essai de toute l'instance."
+    },
+    "src/db/repos/devices.ts#archive": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#clearPause": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#clearPreviousTokenHash": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#create": {
+      "kind": "row",
+      "reason": "L'appareil que la fonction vient de créer, par l'identifiant qu'elle a tiré."
+    },
+    "src/db/repos/devices.ts#failDeletion": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#findById": {
+      "kind": "row",
+      "reason": "L'appareil qui s'authentifie par son jeton ; une commande confronte ensuite la ligne à l'espace de l'appelant."
+    },
+    "src/db/repos/devices.ts#markEnrolled": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#setAgentTarget": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#setAgentVersion": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#setPause": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#setReport": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#setTokenHashes": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/devices.ts#touchSeen": {
+      "kind": "row",
+      "reason": "L'appareil s'est authentifié par son jeton, ou la commande est passée par le contrôle d'accès à l'appareil."
+    },
+    "src/db/repos/featureDomains.ts#due": {
+      "kind": "service",
+      "reason": "La sonde des domaines relève ceux de tous les espaces."
+    },
+    "src/db/repos/featureDomains.ts#routable": {
+      "kind": "service",
+      "reason": "Le routage par nom d'hôte lit les domaines vérifiés de tous les espaces."
+    },
+    "src/db/repos/featureDomains.ts#saveState": {
+      "kind": "service",
+      "reason": "Le verdict de la sonde, sur un domaine qu'elle vient de relever."
+    },
+    "src/db/repos/feedback.ts#anonymizeBefore": {
+      "kind": "service",
+      "reason": "La rétention anonymise les retours anciens de toute l'instance."
+    },
+    "src/db/repos/feedback.ts#countPending": {
+      "kind": "instance",
+      "reason": "Le compteur de la page Retours, réservée à l'administrateur."
+    },
+    "src/db/repos/feedback.ts#findById": {
+      "kind": "instance",
+      "reason": "La page Retours, réservée à l'administrateur."
+    },
+    "src/db/repos/feedback.ts#query": {
+      "kind": "instance",
+      "reason": "La page Retours, réservée à l'administrateur, avec ses filtres."
+    },
+    "src/db/repos/feedback.ts#remove": {
+      "kind": "instance",
+      "reason": "La page Retours, réservée à l'administrateur."
+    },
+    "src/db/repos/feedback.ts#setStatus": {
+      "kind": "instance",
+      "reason": "La page Retours, réservée à l'administrateur."
+    },
+    "src/db/repos/itemSharing.ts#forgetItem": {
+      "kind": "row",
+      "reason": "L'élément vient d'être supprimé par son espace : ses restrictions partent de tous ceux où il était partagé."
+    },
+    "src/db/repos/loginHistory.ts#purgeBefore": {
+      "kind": "service",
+      "reason": "La purge périodique, pour toute l'instance."
+    },
+    "src/db/repos/logs.ts#query": {
+      "kind": "instance",
+      "reason": "Le journal d'audit, lu par l'administrateur avec ses filtres."
+    },
+    "src/db/repos/notificationChannels.ts#systemRouteWorkspaces": {
+      "kind": "service",
+      "reason": "Les alertes système vont aux espaces des administrateurs, quels qu'ils soient."
+    },
+    "src/db/repos/passwordResets.ts#consume": {
+      "kind": "row",
+      "reason": "Le lien vient d'être relu par le condensé de son jeton."
+    },
+    "src/db/repos/passwordResets.ts#purgeExpired": {
+      "kind": "service",
+      "reason": "La purge périodique, pour toute l'instance."
+    },
+    "src/db/repos/quotaPauses.ts#all": {
+      "kind": "service",
+      "reason": "Le recalcul des quotas relit les pauses de toute l'instance."
+    },
+    "src/db/repos/quotaPauses.ts#owners": {
+      "kind": "service",
+      "reason": "Le recalcul des quotas relit les pauses de toute l'instance."
+    },
+    "src/db/repos/quotaPauses.ts#purgeKeysOtherThan": {
+      "kind": "service",
+      "reason": "Le retrait des pauses d'un quota qui n'existe plus, pour toute l'instance."
+    },
+    "src/db/repos/quotaPauses.ts#takeDueRechecks": {
+      "kind": "service",
+      "reason": "Le recalcul des quotas prend les comptes dont l'échéance est passée."
+    },
+    "src/db/repos/refreshTokens.ts#purgeBefore": {
+      "kind": "service",
+      "reason": "La purge périodique, pour toute l'instance."
+    },
+    "src/db/repos/trustedBrowsers.ts#touch": {
+      "kind": "row",
+      "reason": "Le navigateur vient d'être reconnu par le condensé de son jeton."
+    },
+    "src/db/repos/twoFactor.ts#markBackupCodeUsed": {
+      "kind": "row",
+      "reason": "Le code vient d'être relu pour ce compte."
+    },
+    "src/db/repos/users.ts#all": {
+      "kind": "instance",
+      "reason": "La page Utilisateurs et les relevés d'administration lisent tous les comptes."
+    },
+    "src/db/repos/users.ts#count": {
+      "kind": "instance",
+      "reason": "Le premier compte de l'instance devient son administrateur."
+    },
+    "src/db/repos/users.ts#countForUpdate": {
+      "kind": "instance",
+      "reason": "Le premier compte de l'instance devient son administrateur."
+    },
+    "src/db/repos/users.ts#listAdminIds": {
+      "kind": "instance",
+      "reason": "La page Utilisateurs et les relevés d'administration lisent tous les comptes."
+    },
+    "src/db/repos/users.ts#listForAdmin": {
+      "kind": "instance",
+      "reason": "La page Utilisateurs et les relevés d'administration lisent tous les comptes."
+    },
+    "src/db/repos/users.ts#listModeratorIds": {
+      "kind": "instance",
+      "reason": "La page Utilisateurs et les relevés d'administration lisent tous les comptes."
+    },
+    "src/db/repos/users.ts#search": {
+      "kind": "instance",
+      "reason": "La page Utilisateurs et les relevés d'administration lisent tous les comptes."
+    },
+    "src/db/repos/workspaceInvitations.ts#listByEmail": {
+      "kind": "row",
+      "reason": "L'adresse est celle du compte appelant, relue en base : ses invitations l'attendent dans tous les espaces."
+    },
+    "src/db/repos/workspaceInvitations.ts#purgeBefore": {
+      "kind": "service",
+      "reason": "La purge périodique, pour toute l'instance."
+    },
+    "src/db/repos/workspaceRoles.ts#memberCount": {
+      "kind": "row",
+      "reason": "Le rôle vient d'être relu dans l'espace de l'appelant."
+    },
+    "src/db/repos/workspaces.ts#listAll": {
+      "kind": "instance",
+      "reason": "L'administration de la flotte lit tous les espaces."
+    },
+    "src/db/repos/workspaces.ts#listHomeLayoutsNaming": {
+      "kind": "instance",
+      "reason": "Les tuiles d'une fonctionnalité, comptées pour l'administration."
+    },
+    "src/db/repos/workspaces.ts#listIds": {
+      "kind": "instance",
+      "reason": "Les totaux d'une fonctionnalité, pour l'administration."
+    },
+    "src/db/repos/workspaces.ts#listOwnerIds": {
+      "kind": "service",
+      "reason": "Le recalcul des quotas parcourt tous les propriétaires."
+    },
+    "src/features/_sdk/register.ts#execute": {
+      "kind": "relay",
+      "reason": "Le `q` remis à un module : ses requêtes se jugent là où il les écrit."
+    },
+    "src/features/_sdk/register.ts#query": {
+      "kind": "relay",
+      "reason": "Le `q` remis à un module : ses requêtes se jugent là où il les écrit."
+    },
+    "src/features/_sdk/service.ts#listWorkspaceIds": {
+      "kind": "service",
+      "reason": "Le service de fond d'un module parcourt tous les espaces."
+    }
+  }
+}

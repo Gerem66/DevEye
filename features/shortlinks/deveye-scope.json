@@ -1,0 +1,79 @@
+{
+  "tables": {},
+  "keys": {
+    "ft_shortlinks_links": {
+      "columns": ["code"],
+      "reason": "Le code court d'un lien, tiré au hasard et unique : c'est l'adresse publique demandée qui l'apporte."
+    }
+  },
+  "exempt": {
+    "src/server/repo.ts#counters.purgeDims": {
+      "kind": "service",
+      "reason": "Le ménage horaire efface les ventilations anciennes, pour tous les liens."
+    },
+    "src/server/repo.ts#counters.purgeSeen": {
+      "kind": "service",
+      "reason": "Le ménage horaire efface les empreintes des jours passés, pour tous les liens."
+    },
+    "src/server/repo.ts#links.addTotals": {
+      "kind": "service",
+      "reason": "La vidange des compteurs ajoute leurs visites aux liens que la redirection publique a servis."
+    },
+    "src/server/repo.ts#links.block": {
+      "kind": "instance",
+      "reason": "La modération retire le lien d'un signalement, quel que soit son espace."
+    },
+    "src/server/repo.ts#links.dueChecks": {
+      "kind": "service",
+      "reason": "La sonde des destinations relève les liens dus de tous les espaces."
+    },
+    "src/server/repo.ts#links.findById": {
+      "kind": "row",
+      "reason": "Le lien que la commande vient de créer, ou celui du signalement que la modération traite."
+    },
+    "src/server/repo.ts#links.findBySlug": {
+      "kind": "token",
+      "reason": "Le domaine et le slug viennent de l'adresse publique demandée : ensemble, ils ne désignent qu'un lien."
+    },
+    "src/server/repo.ts#links.saveCheck": {
+      "kind": "row",
+      "reason": "Le lien vient d'être relevé par la sonde des destinations, ou relu par la commande, de l'espace de l'appelant ou par un partage (loadLink)."
+    },
+    "src/server/repo.ts#links.totals": {
+      "kind": "instance",
+      "reason": "Les totaux de la vue d'ensemble de l'administration, tous espaces confondus."
+    },
+    "src/server/repo.ts#links.unblock": {
+      "kind": "instance",
+      "reason": "La modération rétablit le lien d'un signalement, quel que soit son espace."
+    },
+    "src/server/repo.ts#reports.close": {
+      "kind": "instance",
+      "reason": "La modération clôt un signalement, quel que soit son espace."
+    },
+    "src/server/repo.ts#reports.countOpen": {
+      "kind": "instance",
+      "reason": "Le compteur des signalements ouverts, pour la modération."
+    },
+    "src/server/repo.ts#reports.countSince": {
+      "kind": "instance",
+      "reason": "Le plafond horaire des mails aux modérateurs compte les signalements de toute l'instance, sans en rendre aucun."
+    },
+    "src/server/repo.ts#reports.find": {
+      "kind": "instance",
+      "reason": "La modération lit un signalement, quel que soit son espace."
+    },
+    "src/server/repo.ts#reports.list": {
+      "kind": "instance",
+      "reason": "La file des signalements, lue par la modération tous espaces confondus."
+    },
+    "src/server/repo.ts#reports.purge": {
+      "kind": "service",
+      "reason": "La rétention retire les signalements clos anciens de toute l'instance."
+    },
+    "src/server/repo.ts#stats.labels": {
+      "kind": "row",
+      "reason": "Les identifiants viennent des ventilations de liens déjà relus, de l'espace de l'appelant ou par un partage, et chaque étiquette ne s'ouvre qu'avec la clé de l'un d'eux."
+    }
+  }
+}

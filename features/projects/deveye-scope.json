@@ -1,0 +1,87 @@
+{
+  "tables": {},
+  "keys": {
+    "ft_projects_public": {
+      "columns": ["public_ref"],
+      "reason": "La référence publique d'un projet, tirée au hasard : qui la tient lit sa page."
+    }
+  },
+  "exempt": {
+    "src/server/copy.ts#linked": {
+      "kind": "row",
+      "reason": "Le projet vient d'être relu chez lui, dans l'espace de l'appelant, par la copie du partage (loadHome)."
+    },
+    "src/server/move.ts#linkCounts": {
+      "kind": "bounded",
+      "reason": "Parcourt LINK_TABLES, chaque table par project_id et workspace_id."
+    },
+    "src/server/move.ts#projectsMove.apply": {
+      "kind": "row",
+      "reason": "Le projet vient d'être relu chez lui par le déplacement du partage (loadHome), et les tables de LINK_TABLES et d'OWNED_TABLES se parcourent par project_id et workspace_id."
+    },
+    "src/server/repo/board.ts#createColumn": {
+      "kind": "row",
+      "reason": "Le projet vient d'être relu visible de l'espace de l'appelant (loadProject), ou créé par la même commande."
+    },
+    "src/server/repo/board.ts#findCard": {
+      "kind": "lookup",
+      "reason": "La carte donne son projet, que chaque appelant relit visible de son espace (loadProject) avant de rien rendre ni écrire."
+    },
+    "src/server/repo/board.ts#findColumn": {
+      "kind": "lookup",
+      "reason": "La colonne donne son projet, que chaque appelant relit visible de son espace (loadProject) avant de rien rendre ni écrire."
+    },
+    "src/server/repo/board.ts#listAssignedIn": {
+      "kind": "row",
+      "reason": "Les projets viennent de listVisible, bornée à l'espace de l'appelant et à ce qui y est projeté."
+    },
+    "src/server/repo/board.ts#nextCardOrder": {
+      "kind": "row",
+      "reason": "La colonne vient d'être relue avec son projet, visible de l'espace de l'appelant (loadColumn, ou la carte et les colonnes du projet relu)."
+    },
+    "src/server/repo/chat.ts#findById": {
+      "kind": "lookup",
+      "reason": "Le message donne son projet, que l'appelant relit visible de son espace (loadProject) avant de rien rendre ni écrire."
+    },
+    "src/server/repo/dashboard.ts#recordMeasure": {
+      "kind": "row",
+      "reason": "Le projet vient d'être relu chez lui (loadProject, assertAtHome), et la tuile vient de sa liste, bornée à son espace."
+    },
+    "src/server/repo/dashboard.ts#upsertKpi": {
+      "kind": "row",
+      "reason": "Relit la tuile que la fonction vient d'écrire dans l'espace du projet, lui-même relu chez lui (loadProject, assertAtHome)."
+    },
+    "src/server/repo/plan.ts#createMilestone": {
+      "kind": "row",
+      "reason": "Le projet vient d'être relu visible de l'espace de l'appelant (loadProject)."
+    },
+    "src/server/repo/plan.ts#findMilestone": {
+      "kind": "lookup",
+      "reason": "Le jalon donne son projet, que chaque appelant relit visible de son espace (loadProject) avant de rien rendre ni écrire."
+    },
+    "src/server/repo/projects.ts#statsFor": {
+      "kind": "row",
+      "reason": "Les projets viennent de listVisible, bornée à l'espace de l'appelant et à ce qui y est projeté."
+    },
+    "src/server/repo/publication.ts#findBySlug": {
+      "kind": "token",
+      "reason": "Le domaine et le slug viennent de l'adresse publique demandée : ensemble, ils ne désignent qu'un projet publié."
+    },
+    "src/server/repo/publication.ts#listOnDomain": {
+      "kind": "row",
+      "reason": "Le domaine vient d'être relu dans l'espace de l'appelant (ctx.domains.get), ou c'est le nom d'hôte de la requête publique qui le désigne."
+    },
+    "src/server/repo/publication.ts#slugsOn": {
+      "kind": "row",
+      "reason": "Le domaine vient d'être relu dans l'espace de l'appelant (assertDomain)."
+    },
+    "src/server/repo/rekey.ts#readTree": {
+      "kind": "bounded",
+      "reason": "Parcourt la liste fixe des tables chiffrées d'un projet, chacune par project_id et workspace_id."
+    },
+    "src/server/repo/rekey.ts#write": {
+      "kind": "row",
+      "reason": "La cellule vient d'être relue par readTree, bornée au projet et à son espace."
+    }
+  }
+}

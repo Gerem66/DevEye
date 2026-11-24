@@ -1,0 +1,80 @@
+{
+  "tables": {
+    "ft_cve_entries": {
+      "class": "instance",
+      "reason": "Le catalogue public des vulnérabilités, commun à toute l'instance."
+    },
+    "ft_cve_eol_products": {
+      "class": "instance",
+      "reason": "Les fins de support publiées, communes à toute l'instance."
+    },
+    "ft_cve_osv_queries": { "class": "instance", "reason": "Le cache des réponses d'OSV, par paquet." },
+    "ft_cve_osv_vulns": { "class": "instance", "reason": "Le cache des avis d'OSV." },
+    "ft_cve_pkg_meta": { "class": "instance", "reason": "Le cache des fiches de paquets." },
+    "ft_cve_products": { "class": "instance", "reason": "Les produits que touche chaque vulnérabilité du catalogue." },
+    "ft_cve_state": { "class": "instance", "reason": "L'état de la relève du catalogue." },
+    "ft_cve_watched": { "class": "instance", "reason": "Les produits que la relève suit, tous espaces confondus." }
+  },
+  "exempt": {
+    "src/server/exposure/repo.ts#askRefresh": {
+      "kind": "row",
+      "reason": "L'élément vient d'être lu : par findAsset dans l'espace de l'appelant, ou par la veille au rapport de son appareil."
+    },
+    "src/server/exposure/repo.ts#deleteAsset": {
+      "kind": "service",
+      "reason": "La veille retire un élément qu'elle vient de lister dans son espace et que sa source ne rend plus."
+    },
+    "src/server/exposure/repo.ts#findAssetsByRef": {
+      "kind": "service",
+      "reason": "Au rapport d'un appareil, la veille retrouve les éléments qui le suivent dans tous les espaces où il est partagé."
+    },
+    "src/server/exposure/repo.ts#ignoreFinding": {
+      "kind": "row",
+      "reason": "Le constat vient d'être lu par findFinding dans l'espace de l'appelant."
+    },
+    "src/server/exposure/repo.ts#markAnnounced": {
+      "kind": "service",
+      "reason": "La veille marque les éléments de l'espace qu'elle vient d'évaluer, lus par listAssets."
+    },
+    "src/server/exposure/repo.ts#purgeResolved": {
+      "kind": "service",
+      "reason": "L'entretien de la veille efface les constats résolus anciens de tous les espaces."
+    },
+    "src/server/exposure/repo.ts#resolveFinding": {
+      "kind": "service",
+      "reason": "La veille rapproche les constats de l'espace qu'elle évalue, lus par listFindings."
+    },
+    "src/server/exposure/repo.ts#restoreFinding": {
+      "kind": "row",
+      "reason": "Le constat vient d'être lu par findFinding dans l'espace de l'appelant."
+    },
+    "src/server/exposure/repo.ts#saveCheck": {
+      "kind": "service",
+      "reason": "La veille écrit la lecture de l'élément qu'elle vient de relever dans son espace."
+    },
+    "src/server/exposure/repo.ts#saveError": {
+      "kind": "service",
+      "reason": "La veille écrit la lecture de l'élément qu'elle vient de relever dans son espace."
+    },
+    "src/server/exposure/repo.ts#saveScan": {
+      "kind": "service",
+      "reason": "La veille écrit la lecture de l'élément qu'elle vient de relever dans son espace."
+    },
+    "src/server/exposure/repo.ts#setExcluded": {
+      "kind": "row",
+      "reason": "L'élément vient d'être lu par findAsset dans l'espace de l'appelant."
+    },
+    "src/server/exposure/repo.ts#updateFinding": {
+      "kind": "service",
+      "reason": "La veille rapproche les constats de l'espace qu'elle évalue, lus par listFindings."
+    },
+    "src/server/exposure/repo.ts#workspacesWithKeys": {
+      "kind": "service",
+      "reason": "La veille cherche quels espaces emploient un produit du catalogue pour les réévaluer : seuls leurs identifiants sortent."
+    },
+    "src/server/repo.ts#purge": {
+      "kind": "service",
+      "reason": "La purge du catalogue commun garde toute vulnérabilité qu'un espace, quel qu'il soit, a épinglée."
+    }
+  }
+}

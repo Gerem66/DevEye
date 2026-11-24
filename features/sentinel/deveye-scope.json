@@ -1,0 +1,38 @@
+{
+  "tables": {},
+  "keys": {},
+  "exempt": {
+    "src/server/repo.ts#acknowledge": {
+      "kind": "row",
+      "reason": "Le constat vient d'être relu, et son appareil autorisé dans l'espace de l'appelant, qui en est le domicile (authorizedFindings)."
+    },
+    "src/server/repo.ts#list": {
+      "kind": "bounded",
+      "reason": "La clause assemblée commence toujours par device_id IN (…) : les appareils que l'appelant voit, rendus par devices.list."
+    },
+    "src/server/repo.ts#listEnabled": {
+      "kind": "service",
+      "reason": "Le moteur relève les appareils surveillés de tous les espaces."
+    },
+    "src/server/repo.ts#markNotified": {
+      "kind": "service",
+      "reason": "Le moteur marque les constats qu'il vient d'ouvrir et d'annoncer."
+    },
+    "src/server/repo.ts#pruneResolved": {
+      "kind": "service",
+      "reason": "La passe lente du moteur efface les constats résolus anciens de tous les appareils."
+    },
+    "src/server/repo.ts#reopen": {
+      "kind": "row",
+      "reason": "Le constat vient d'être relu, et son appareil autorisé dans l'espace de l'appelant, qui en est le domicile (homeDevice)."
+    },
+    "src/server/repo.ts#resolve": {
+      "kind": "row",
+      "reason": "Le constat vient d'être relu, et son appareil autorisé dans l'espace de l'appelant, qui en est le domicile (authorizedFindings)."
+    },
+    "src/server/repo.ts#upsert": {
+      "kind": "row",
+      "reason": "Deux fonctions de ce nom : celle des constats écrit la ligne qu'elle vient de relire par appareil et empreinte, celle des réglages insère sous device_id, toujours en tête de ses colonnes calculées, pour un appareil que le moteur évalue ou qu'une commande vient d'autoriser dans son espace."
+    }
+  }
+}

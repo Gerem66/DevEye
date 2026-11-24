@@ -1,0 +1,28 @@
+{
+  "exempt": {
+    "src/server/move.ts#nameTaken": {
+      "kind": "row",
+      "reason": "Le déplacement vient de constater que la base habite l'espace de l'appelant (loadHome, par findVisible)."
+    },
+    "src/server/repo.ts#recordCheck": {
+      "kind": "service",
+      "reason": "Le relevé écrit sur la base qu'il vient de relire dans son espace (find), pour l'ordonnanceur comme pour database.inspect."
+    },
+    "src/server/repo.ts#listDue": {
+      "kind": "service",
+      "reason": "Le relevé périodique prend les bases dues de tous les espaces."
+    },
+    "src/server/repo.ts#recordKpiValues": {
+      "kind": "row",
+      "reason": "La base vient d'être relue dans son espace : chez elle par la commande (loadHome), ou par le relevé (find)."
+    },
+    "src/server/repo.ts#listEnabledAlerts": {
+      "kind": "service",
+      "reason": "Le relevé lit les alertes de la base qu'il vient de relire dans son espace (find)."
+    },
+    "src/server/repo.ts#recordAlertCheck": {
+      "kind": "service",
+      "reason": "Le relevé écrit sur une alerte qu'il vient de lire, pour la base relue dans son espace (find)."
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "tables": {},
+  "keys": {},
+  "exempt": {
+    "src/server/copy.ts#gitCopy.plan": {
+      "kind": "row",
+      "reason": "La copie vient de constater que le dépôt habite l'espace de l'appelant (loadHome, par findVisibleRepo)."
+    },
+    "src/server/move.ts#gitMove.apply": {
+      "kind": "bounded",
+      "reason": "Le dépôt vient d'être constaté dans l'espace de l'appelant (loadHome), et chaque écriture de la liste fixe des tables du cache porte le dépôt et l'espace quitté."
+    },
+    "src/server/move.ts#gitMove.plan": {
+      "kind": "row",
+      "reason": "Le déplacement vient de constater que le dépôt habite l'espace de l'appelant (loadHome, par findVisibleRepo)."
+    },
+    "src/server/move.ts#slugTaken": {
+      "kind": "row",
+      "reason": "Le déplacement vient de constater que le dépôt habite l'espace de l'appelant (loadHome, par findVisibleRepo)."
+    },
+    "src/server/repo.ts#hasCommit": {
+      "kind": "service",
+      "reason": "La synchronisation lit le cache du dépôt qu'elle vient de relire dans son espace (findRepo)."
+    },
+    "src/server/repo.ts#latestCommitAt": {
+      "kind": "service",
+      "reason": "La synchronisation lit le cache du dépôt qu'elle vient de relire dans son espace (findRepo)."
+    },
+    "src/server/repo.ts#listDue": {
+      "kind": "service",
+      "reason": "La synchronisation relève les dépôts dus de tous les espaces."
+    },
+    "src/server/repo.ts#markSynced": {
+      "kind": "service",
+      "reason": "La synchronisation écrit sur le dépôt qu'elle vient de relire dans son espace (findRepo)."
+    },
+    "src/server/repo.ts#pruneBranches": {
+      "kind": "service",
+      "reason": "La synchronisation retire les branches disparues du dépôt qu'elle vient de relire dans son espace (findRepo)."
+    },
+    "src/server/repo.ts#setBranchComparison": {
+      "kind": "service",
+      "reason": "La synchronisation écrit sur une branche du dépôt qu'elle vient de relire dans son espace (findRepo)."
+    }
+  }
+}

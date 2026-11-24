@@ -1,0 +1,56 @@
+{
+  "exempt": {
+    "src/server/move.ts#fingerprintTaken": {
+      "kind": "row",
+      "reason": "Le déplacement vient de constater que l'appareil habite l'espace de l'appelant (loadHome, par findVisible)."
+    },
+    "src/server/repo/devices.ts#findById": {
+      "kind": "row",
+      "reason": "La garde des appareils vient de relire la ligne visible depuis l'espace de l'appelant (devices.authorize, par findVisible), ou la commande vient d'écrire sur elle."
+    },
+    "src/server/repo/devices.ts#setStatus": {
+      "kind": "row",
+      "reason": "La commande vient de relire l'appareil chez lui, dans l'espace de l'appelant (loadHomeDevice)."
+    },
+    "src/server/repo/devices.ts#rename": {
+      "kind": "row",
+      "reason": "La commande vient de relire l'appareil chez lui, dans l'espace de l'appelant (loadHomeDevice)."
+    },
+    "src/server/repo/devices.ts#setConfig": {
+      "kind": "row",
+      "reason": "La commande vient de relire l'appareil chez lui, dans l'espace de l'appelant (loadHomeDevice)."
+    },
+    "src/server/repo/devices.ts#requestDeletion": {
+      "kind": "row",
+      "reason": "La commande vient de relire l'appareil chez lui, dans l'espace de l'appelant (loadHomeDevice)."
+    },
+    "src/server/repo/devices.ts#cancelDeletion": {
+      "kind": "row",
+      "reason": "La commande vient de relire l'appareil chez lui, dans l'espace de l'appelant (loadHomeDevice)."
+    },
+    "src/server/repo/devices.ts#archive": {
+      "kind": "row",
+      "reason": "La commande vient de relire l'appareil chez lui, dans l'espace de l'appelant (loadHomeDevice)."
+    },
+    "src/server/repo/devices.ts#delete": {
+      "kind": "row",
+      "reason": "La commande vient de relire l'appareil chez lui, dans l'espace de l'appelant (loadHomeDevice)."
+    },
+    "src/server/repo/metrics.ts#pruneByRetention": {
+      "kind": "service",
+      "reason": "Le balayage de rétention purge les métriques expirées des appareils de tous les espaces."
+    },
+    "src/server/repo/presence.ts#pruneByRetention": {
+      "kind": "service",
+      "reason": "Le balayage de rétention purge la présence expirée des appareils de tous les espaces."
+    },
+    "src/server/repo/processSamples.ts#pruneByRetention": {
+      "kind": "service",
+      "reason": "Le balayage de rétention purge les relevés de processus expirés des appareils de tous les espaces."
+    },
+    "src/server/repo/processSamples.ts#thinBefore": {
+      "kind": "service",
+      "reason": "Le balayage de rétention réduit à leur top les anciennes listes de processus des appareils de tous les espaces."
+    }
+  }
+}

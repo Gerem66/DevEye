@@ -8,6 +8,14 @@
 
 export class UnreadSql extends Error {}
 
+/**
+ * Ce qui tient lieu, dans le texte, d'un morceau que le code assemble à
+ * l'exécution. Il se tolère là où il ne peut cacher ni table ni OU : la liste
+ * rendue, un SET, des valeurs, un tri, ou l'intérieur d'une parenthèse d'une
+ * condition. Ailleurs la requête n'est pas lue.
+ */
+export const DYNAMIC_SQL = '__DYNAMIC__';
+
 export interface Token {
     kind: 'word' | 'num' | 'str' | 'param' | 'punct';
     text: string;
@@ -205,6 +213,11 @@ class Reader {
         return tok !== undefined && tok.kind === 'punct' && tok.text === text;
     }
 
+    private dynamic(lo: number, hi: number): boolean {
+        for (const i of this.top(lo, hi)) if (this.t[i].kind === 'word' && this.t[i].text === DYNAMIC_SQL) return true;
+        return false;
+    }
+
     /** La parenthèse fermante de celle ouverte en `i`. */
     private end(i: number): number {
         const j = this.close.get(i);
@@ -269,6 +282,8 @@ class Reader {
         if (this.is(lo, 'INSERT', 'REPLACE')) return this.insert(lo, hi, ctes);
         if (this.is(lo, 'UPDATE')) return this.update(lo, hi, ctes);
         if (this.is(lo, 'DELETE')) return this.remove(lo, hi, ctes);
+        if (this.t.some((tok) => tok.kind === 'word' && tok.text === DYNAMIC_SQL))
+            throw new UnreadSql('requête calculée');
         return { kind: 'other' };
     }
 
@@ -298,7 +313,10 @@ class Reader {
         const listEnd = from === -1 ? hi : from;
         this.collect(lo + 1, listEnd, nested);
         const first = this.firstColumn(lo + 1, listEnd);
-        if (from === -1) return { refs: [], cond: { kind: 'opaque' }, nested, first };
+        if (from === -1) {
+            if (this.dynamic(lo + 1, hi)) throw new UnreadSql('FROM peut-être calculé');
+            return { refs: [], cond: { kind: 'opaque' }, nested, first };
+        }
 
         const clause = (start: number): number => {
             for (const i of this.top(start, hi)) {
@@ -321,6 +339,8 @@ class Reader {
 
     /** Les tables de `[lo, hi)`, et la condition de chaque jointure. */
     private tables(lo: number, hi: number, nested: Query[]): { refs: TableRef[]; conds: Cond[] } {
+        // Un morceau calculé ici peut être une table, une jointure ou un WHERE entier.
+        if (this.dynamic(lo, hi)) throw new UnreadSql('liste de tables calculée');
         const refs: TableRef[] = [];
         const conds: Cond[] = [];
         let i = lo;
@@ -417,6 +437,11 @@ class Reader {
     }
 
     private cond(lo: number, hi: number, nested: Query[]): Cond {
+        // Un morceau calculé à ce niveau peut commencer par OR : rien ici ne borne plus.
+        if (this.dynamic(lo, hi)) {
+            this.collect(lo, hi, nested);
+            return { kind: 'opaque' };
+        }
         const ors = this.split(lo, hi, 'OR');
         if (ors.length > 1) return { kind: 'or', items: ors.map(([a, b]) => this.cond(a, b, nested)) };
         const ands = this.split(lo, hi, 'AND');
@@ -531,11 +556,13 @@ class Reader {
         while (this.is(i, 'LOW_PRIORITY', 'DELAYED', 'HIGH_PRIORITY', 'IGNORE', 'INTO')) i++;
         const name = this.t[i];
         if (!name || name.kind !== 'word' || this.punct(i + 1, '.')) throw new UnreadSql('table d’insertion illisible');
+        if (name.text === DYNAMIC_SQL) throw new UnreadSql('table d’insertion calculée');
         i++;
         let columns: string[] | null = null;
         if (this.punct(i, '(') && !this.opensQuery(i)) {
             const close = this.end(i);
             columns = this.t.slice(i + 1, close).flatMap((tok) => (tok.kind === 'word' ? [tok.text] : []));
+            if (columns.includes(DYNAMIC_SQL)) throw new UnreadSql('colonnes d’insertion calculées');
             i = close + 1;
         }
         const nested: Query[] = [];

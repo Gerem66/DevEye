@@ -50,6 +50,35 @@ function variants(source: string): string[] {
     return sqlVariants(arg, checker).sort();
 }
 
+/** La lecture qui tolère l'inconnu, espaces ramenés à un. */
+function tolerant(source: string): string[] {
+    const { checker, arg } = compile(`declare function sql(s: string): void;\n${source}`);
+    return sqlVariants(arg, checker, { tolerant: true }).map((s) => s.replace(/\s+/g, ' ').trim());
+}
+
+test('sqlVariants tolérant garde la forme autour d’un morceau calculé', () => {
+    assert.deepEqual(
+        tolerant(`
+            declare const sets: string[];
+            sql(\`UPDATE t SET \${sets.join(', ')} WHERE id = ? AND workspace_id = ?\`);
+        `),
+        ['UPDATE t SET __DYNAMIC__ WHERE id = ? AND workspace_id = ?']
+    );
+    assert.deepEqual(
+        tolerant(`
+            declare const table: string;
+            declare const all: boolean;
+            sql('DELETE FROM ' + table + (all ? '' : ' WHERE workspace_id = ?'));
+        `),
+        ['DELETE FROM __DYNAMIC__', 'DELETE FROM __DYNAMIC__ WHERE workspace_id = ?']
+    );
+});
+
+test('sqlVariants tolérant échoue encore sur une requête qui n’est qu’inconnue', () => {
+    const { checker, arg } = compile('declare function sql(s: string): void;\ndeclare const text: string;\nsql(text);');
+    assert.throws(() => sqlVariants(arg, checker, { tolerant: true }), DynamicSql);
+});
+
 test('sqlVariants suit les constantes, les gabarits et les ternaires', () => {
     assert.deepEqual(
         variants(`
@@ -193,4 +222,27 @@ test('misfit accepte un resserrement et refuse un NULL non déclaré, un boolée
     const phase = { ...str, sqlType: 'ENUM', nullable: false, enumValues: ['running', 'passed', 'failed'] };
     assert.match(misfit(phase, field('Phase')) ?? '', /'failed'/);
     assert.equal(misfit({ ...phase, enumValues: ['running'] }, field('Phase')), null);
+});
+
+test('sqlVariants relève le paramètre dont le texte dépend, et le lit depuis un appel', () => {
+    const { checker, arg } = compile(`
+        declare function sql(s: string): void;
+        function one(where: string) {
+            sql(\`SELECT * FROM t WHERE \${where}\`);
+        }
+    `);
+    const parameters = new Set<ts.ParameterDeclaration>();
+    assert.deepEqual(
+        sqlVariants(arg, checker, { tolerant: true, parameters }).map((s) => s.replace(/\s+/g, ' ').trim()),
+        ['SELECT * FROM t WHERE __DYNAMIC__']
+    );
+    const [where] = [...parameters];
+    assert.equal(where.name.getText(), 'where');
+
+    const symbol = checker.getSymbolAtLocation(where.name);
+    assert.ok(symbol);
+    const given = ts.factory.createStringLiteral('id = ? AND workspace_id = ?');
+    assert.deepEqual(sqlVariants(arg, checker, { tolerant: true, bindings: new Map([[symbol, given]]) }), [
+        'SELECT * FROM t WHERE id = ? AND workspace_id = ?'
+    ]);
 });

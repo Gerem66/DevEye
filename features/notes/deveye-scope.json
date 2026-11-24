@@ -1,0 +1,12 @@
+{
+  "exempt": {
+    "src/server/copy.ts#notesCopy.plan": {
+      "kind": "row",
+      "reason": "La note vient d'être relue chez elle, dans l'espace de l'appelant, par la copie du partage (loadHome)."
+    },
+    "src/server/move.ts#notesMove.plan": {
+      "kind": "row",
+      "reason": "La note vient d'être relue chez elle, dans l'espace de l'appelant, par le déplacement du partage (loadHome)."
+    }
+  }
+}

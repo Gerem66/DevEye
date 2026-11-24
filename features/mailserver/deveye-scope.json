@@ -1,0 +1,150 @@
+{
+  "tables": {
+    "ft_mailserver_messages": {
+      "class": "child",
+      "parents": {
+        "mailbox_id": "ft_mailserver_mailboxes"
+      }
+    },
+    "ft_mailserver_tls": {
+      "class": "instance",
+      "reason": "Les certificats du serveur de mail."
+    }
+  },
+  "keys": {
+    "ft_mailserver_mailboxes": {
+      "columns": ["address"],
+      "reason": "Une adresse ne désigne qu'une boîte sur toute l'instance : la remise SMTP l'apporte comme destinataire, une session IMAP ou SMTP comme identifiant que son mot de passe confirme."
+    }
+  },
+  "exempt": {
+    "src/server/repo.ts#adjustUsage": {
+      "kind": "row",
+      "reason": "La boîte est celle de la session authentifiée, celle que la remise vient de résoudre par son adresse, ou celle d'une ligne de la file d'envoi."
+    },
+    "src/server/repo.ts#allocateUid": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être relu par son chemin dans la boîte qui reçoit : celle de la session authentifiée, ou celle que la remise a résolue par son adresse."
+    },
+    "src/server/repo.ts#bumpDaily": {
+      "kind": "bounded",
+      "reason": "L'insertion porte mailbox_id, celui d'une boîte déjà relevée ; seul le nom du compteur, pris dans une union fermée, est calculé."
+    },
+    "src/server/repo.ts#claimQueue": {
+      "kind": "service",
+      "reason": "La file d'envoi réserve une ligne qu'elle vient de relever."
+    },
+    "src/server/repo.ts#deferQueue": {
+      "kind": "service",
+      "reason": "La file d'envoi reporte une ligne qu'elle vient de relever."
+    },
+    "src/server/repo.ts#deleteBlob": {
+      "kind": "row",
+      "reason": "Le corps dont la dernière référence vient d'être rendue, par un message ou une ligne de file déjà relus."
+    },
+    "src/server/repo.ts#deleteFolder": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être relu par son chemin dans la boîte de la session IMAP authentifiée."
+    },
+    "src/server/repo.ts#deleteMailbox": {
+      "kind": "row",
+      "reason": "La commande vient de relire la boîte dans l'espace de l'appelant et d'exiger qu'il soit son domicile (loadHomeMailbox)."
+    },
+    "src/server/repo.ts#deleteMessage": {
+      "kind": "row",
+      "reason": "Le message vient d'être relu par son dossier, dans la boîte de la session IMAP authentifiée."
+    },
+    "src/server/repo.ts#dueQueue": {
+      "kind": "service",
+      "reason": "La file d'envoi relève les lignes dues de tous les espaces."
+    },
+    "src/server/repo.ts#findBlob": {
+      "kind": "row",
+      "reason": "L'identifiant du corps vient d'un message ou d'une ligne de file déjà relus : par le dossier d'une session authentifiée, par la file d'envoi, ou par la commande qui a confronté la ligne à l'espace de l'appelant."
+    },
+    "src/server/repo.ts#findById": {
+      "kind": "row",
+      "reason": "L'identifiant vient d'une boîte déjà relevée : authentifiée par son adresse (IMAP, soumission), listée dans son espace (export, sauvegarde) ou portée par une ligne de la file d'envoi ; `find`, lui, confronte la ligne à l'espace qu'on lui donne."
+    },
+    "src/server/repo.ts#findDomainKey": {
+      "kind": "row",
+      "reason": "L'hôte vient du domaine que le socle remet pour l'espace de l'appelant, et un hôte n'a qu'une clé DKIM dans l'instance."
+    },
+    "src/server/repo.ts#listQueue": {
+      "kind": "row",
+      "reason": "La boîte vient d'être relue visible de l'espace de l'appelant, chez elle ou par un partage (loadMailbox)."
+    },
+    "src/server/repo.ts#messageMeta": {
+      "kind": "row",
+      "reason": "Le message vient d'être relu par son dossier, dans la boîte de la session IMAP authentifiée."
+    },
+    "src/server/repo.ts#nextUidValidity": {
+      "kind": "row",
+      "reason": "La boîte vient d'être créée par la commande, ou c'est celle de la session IMAP authentifiée."
+    },
+    "src/server/repo.ts#purgeEvents": {
+      "kind": "service",
+      "reason": "La rétention purge le journal de toutes les boîtes."
+    },
+    "src/server/repo.ts#queueCounts": {
+      "kind": "row",
+      "reason": "La boîte vient d'être relue visible de l'espace de l'appelant (loadMailbox), ou c'est celle de la session SMTP authentifiée."
+    },
+    "src/server/repo.ts#queueDepth": {
+      "kind": "instance",
+      "reason": "L'état du serveur de mail montre le nombre de messages en file dans toute l'instance, à tout membre qui lit la fonctionnalité."
+    },
+    "src/server/repo.ts#refBlob": {
+      "kind": "row",
+      "reason": "Le corps vient d'être écrit par la soumission, ou son identifiant vient d'un message ou d'une ligne de file déjà relus."
+    },
+    "src/server/repo.ts#removeQueue": {
+      "kind": "row",
+      "reason": "La ligne vient d'être relevée par la file d'envoi, ou relue par la commande et confrontée à l'espace de l'appelant."
+    },
+    "src/server/repo.ts#renameFolder": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être listé parmi ceux de la boîte de la session IMAP authentifiée."
+    },
+    "src/server/repo.ts#requeueStuck": {
+      "kind": "service",
+      "reason": "Au démarrage, le moteur remet en file les lignes qu'un arrêt a laissées en cours, tous espaces confondus."
+    },
+    "src/server/repo.ts#retryQueueNow": {
+      "kind": "row",
+      "reason": "La commande vient de relire la ligne et de la confronter à l'espace de l'appelant."
+    },
+    "src/server/repo.ts#setBanner": {
+      "kind": "row",
+      "reason": "La commande vient de relire la boîte dans l'espace de l'appelant et d'exiger qu'il soit son domicile (loadHomeMailbox)."
+    },
+    "src/server/repo.ts#setFlags": {
+      "kind": "row",
+      "reason": "Le message vient d'être relu par son dossier, dans la boîte de la session IMAP authentifiée."
+    },
+    "src/server/repo.ts#setPassword": {
+      "kind": "row",
+      "reason": "La commande vient de relire la boîte dans l'espace de l'appelant et d'exiger qu'il soit son domicile (loadHomeMailbox)."
+    },
+    "src/server/repo.ts#setSubscribed": {
+      "kind": "row",
+      "reason": "Le dossier vient d'être relu par son chemin dans la boîte de la session IMAP authentifiée."
+    },
+    "src/server/repo.ts#touchCredential": {
+      "kind": "row",
+      "reason": "Le mot de passe d'application vient d'être relu parmi ceux de la boîte qui s'authentifie, et son secret vérifié."
+    },
+    "src/server/repo.ts#touchDelivery": {
+      "kind": "row",
+      "reason": "La boîte vient d'être résolue par l'adresse du destinataire, ou relue depuis la ligne de file dont l'avis de non-remise lui revient."
+    },
+    "src/server/repo.ts#touchLogin": {
+      "kind": "row",
+      "reason": "La boîte vient de s'authentifier par son adresse et son mot de passe."
+    },
+    "src/server/repo.ts#updateMailbox": {
+      "kind": "row",
+      "reason": "La commande vient de relire la boîte dans l'espace de l'appelant et d'exiger qu'il soit son domicile (loadHomeMailbox)."
+    }
+  }
+}

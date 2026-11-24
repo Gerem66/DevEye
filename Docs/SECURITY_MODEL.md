@@ -919,7 +919,9 @@ pendant qu'une session est déverrouillée.
 À chaque poussée : les tests unitaires du serveur, du client, des modules et de
 l'agent ; un test qui confronte chaque requête des dépôts du socle à la garde
 qu'elle déclare (espace, compte, appareil) ; un contrôle qui prépare, sur une
-base MySQL jetable, chaque requête SQL que le serveur peut envoyer ; un
+base MySQL jetable, chaque requête SQL que le serveur peut envoyer, puis relit
+chacune et refuse celle qui cite une table d'espace sans la borner à un espace,
+sauf dispense écrite avec sa raison ; un
 passage qui ouvre chaque module dans un vrai navigateur ; et les parcours de
 la page « Tests et débogage », joués par des comptes jetables sur un serveur
 démarré pour l'occasion : inscription et suppression d'un compte, espace

@@ -1,0 +1,27 @@
+{
+  "tables": {
+    "ft_moderation_meta": { "class": "instance", "reason": "L'état de la relève des listes de modération." },
+    "ft_moderation_rules": {
+      "class": "instance",
+      "reason": "Les règles de modération, qui valent pour toute l'instance."
+    }
+  },
+  "exempt": {
+    "src/server/repo.ts#countHitsSince": {
+      "kind": "instance",
+      "reason": "Les chiffres du module dans la vue d'ensemble de l'administration, réservée à l'administrateur."
+    },
+    "src/server/repo.ts#listHits": {
+      "kind": "instance",
+      "reason": "La page de modération, réservée aux modérateurs, lit les détections de toute l'instance."
+    },
+    "src/server/repo.ts#listHitsOfUser": {
+      "kind": "row",
+      "reason": "L'export d'un compte lit ses propres détections, dans tous ses espaces."
+    },
+    "src/server/repo.ts#purgeHits": {
+      "kind": "service",
+      "reason": "La rétention purge les détections anciennes de toute l'instance."
+    }
+  }
+}

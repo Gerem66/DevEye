@@ -35,23 +35,36 @@ const tableDeclarationSchema = z.discriminatedUnion('class', [
 
 const exemptionSchema = z.strictObject({
     /**
-     * `service` : un service de fond lit tous les espaces. `token` : un secret
-     * que seul son porteur détient désigne la ligne. `row` : la ligne vient
-     * d'une lecture déjà bornée. `instance` : une lecture d'administration.
+     * `service` : un service de fond lit tous les espaces. `instance` : une
+     * lecture d'administration ou d'exploitation. `token` : un secret que seul
+     * son porteur détient désigne la ligne. `row` : la ligne vient d'une
+     * lecture déjà bornée. `lookup` : la ligne n'est lue que pour remonter à
+     * l'élément dont l'accès se vérifie ensuite, et rien n'en sort avant.
+     * `bounded` : la requête est bornée dans son texte, que l'outil ne sait pas
+     * lire. `relay` : la fonction exécute une requête écrite ailleurs.
      */
-    kind: z.enum(['service', 'token', 'row', 'instance']),
+    kind: z.enum(['service', 'instance', 'token', 'row', 'lookup', 'bounded', 'relay']),
     reason: z.string().min(1)
 });
+
+/**
+ * Des colonnes qui désignent une ligne à elles seules, en plus de la borne de
+ * sa table : un jeton que seul son porteur détient, une clé unique que la
+ * requête apporte (un nom d'hôte, une adresse).
+ */
+const keyDeclarationSchema = z.strictObject({ columns: z.array(z.string().min(1)).min(1), reason: z.string().min(1) });
 
 /** Un `deveye-scope.json` de module, ou le `src/db/scope.json` du socle. */
 export const scopeFileSchema = z.strictObject({
     $comment: z.string().optional(),
     tables: z.record(z.string(), tableDeclarationSchema).default({}),
+    keys: z.record(z.string(), keyDeclarationSchema).default({}),
     /** `fichier#fonction`, le fichier depuis la racine du module. */
     exempt: z.record(z.string().regex(/^[^#]+#[^#]+$/), exemptionSchema).default({})
 });
 
 export type TableDeclaration = z.infer<typeof tableDeclarationSchema>;
+export type KeyDeclaration = z.infer<typeof keyDeclarationSchema>;
 export type Exemption = z.infer<typeof exemptionSchema>;
 export type ScopeFile = z.infer<typeof scopeFileSchema>;
 
@@ -61,6 +74,8 @@ export interface TableScope {
     columns: readonly string[];
     /** Bornent aussi, mais seulement jointes à des lignes déjà bornées. */
     joins: readonly string[];
+    /** Désignent une ligne à elles seules : un jeton, une clé unique. */
+    keys: readonly string[];
 }
 
 const WORKSPACE_COLUMNS = ['workspace_id', 'home_workspace_id'];
@@ -77,7 +92,8 @@ function rowIdOf(info: TableInfo): string | null {
  */
 export function classifyTables(
     schema: Schema,
-    declared: ReadonlyMap<string, TableDeclaration>
+    declared: ReadonlyMap<string, TableDeclaration>,
+    keys: ReadonlyMap<string, KeyDeclaration> = new Map()
 ): { scopes: Map<string, TableScope>; unclassified: string[]; problems: string[] } {
     const scopes = new Map<string, TableScope>();
     const problems: string[] = [];
@@ -100,7 +116,7 @@ export function classifyTables(
             continue;
         }
         if (decl.class === 'instance') {
-            scopes.set(table, { class: 'instance', columns: [], joins: [] });
+            scopes.set(table, { class: 'instance', columns: [], joins: [], keys: [] });
             continue;
         }
         const named = decl.class === 'account' ? decl.columns : Object.keys(decl.parents);
@@ -109,7 +125,8 @@ export function classifyTables(
             problems.push(`« ${table} » : colonne déclarée inconnue (${missing.join(', ')})`);
             continue;
         }
-        if (decl.class === 'account') scopes.set(table, { class: 'account', columns: decl.columns, joins: [] });
+        if (decl.class === 'account')
+            scopes.set(table, { class: 'account', columns: decl.columns, joins: [], keys: [] });
         else columns.set(table, named);
     }
 
@@ -136,12 +153,17 @@ export function classifyTables(
 
     for (const [table, own] of columns) {
         if (direct.has(table)) {
-            scopes.set(table, { class: 'direct', columns: own, joins: [] });
+            scopes.set(table, { class: 'direct', columns: own, joins: [], keys: [] });
             continue;
         }
         // Toutes ses clés vers une table d'espace, pas seulement la première trouvée.
-        const keys = [...(schema.get(table)?.foreignKeys ?? [])].filter(([, parent]) => columns.has(parent));
-        scopes.set(table, { class: 'child', columns: [...new Set([...own, ...keys.map(([c]) => c)])], joins: [] });
+        const via = [...(schema.get(table)?.foreignKeys ?? [])].filter(([, parent]) => columns.has(parent));
+        scopes.set(table, {
+            class: 'child',
+            columns: [...new Set([...own, ...via.map(([c]) => c)])],
+            joins: [],
+            keys: []
+        });
     }
     // Une jointure ne borne que dans son monde : l'auteur d'une ligne d'espace
     // ne dit pas dans quel espace elle est.
@@ -157,6 +179,19 @@ export function classifyTables(
             .filter(([column, parent]) => !scope.columns.includes(column) && realm(parent) === realm(table))
             .map(([column]) => column);
         scopes.set(table, { ...scope, joins });
+    }
+
+    for (const [table, key] of keys) {
+        const info = schema.get(table);
+        const scope = scopes.get(table);
+        if (!info) problems.push(`« ${table} » a des clés déclarées, mais la base ne la connaît pas`);
+        else if (!scope || scope.class === 'instance')
+            problems.push(`« ${table} » n'est pas bornée : une clé n'y désigne rien`);
+        else if (key.columns.some((c) => !info.columns.has(c))) {
+            problems.push(
+                `« ${table} » : clé déclarée inconnue (${key.columns.filter((c) => !info.columns.has(c)).join(', ')})`
+            );
+        } else scopes.set(table, { ...scope, keys: key.columns });
     }
 
     const unclassified = [...schema.keys()].filter((table) => !scopes.has(table)).sort();
@@ -239,7 +274,7 @@ class Analysis {
         const scope = this.scope(ref);
         const info = this.info(ref);
         if (!scope || !info) return false;
-        return scope.columns.includes(column) || scope.joins.includes(column) || rowIdOf(info) === column;
+        return [...scope.columns, ...scope.joins, ...scope.keys].includes(column) || rowIdOf(info) === column;
     }
 
     /** Les tables qu'une condition borne, quand elle est vraie et que `env` l'est déjà. */
@@ -264,7 +299,8 @@ class Analysis {
                 const ref = this.resolve(cond.column, chain);
                 const scope = ref && this.scope(ref);
                 if (!ref || !scope) return new Set();
-                if (scope.columns.includes(cond.column.name)) return new Set([ref]);
+                if (scope.columns.includes(cond.column.name) || scope.keys.includes(cond.column.name))
+                    return new Set([ref]);
                 const info = this.info(ref);
                 if (cond.param === null || !info || scope.class === 'instance') return new Set();
                 return rowIdOf(info) === cond.column.name && this.rowId(cond.param) ? new Set([ref]) : new Set();
@@ -324,11 +360,40 @@ class Analysis {
         return scope.class === 'instance' ? false : scope;
     }
 
+    /**
+     * Les tables jointes par leur clé à une table nommée avant elles : `LEFT
+     * JOIN users u ON u.id = r.user_id` ne rend que les lignes que `r` désigne.
+     */
+    private named(block: Block, chain: readonly Block[]): Set<TableRef> {
+        const out = new Set<TableRef>();
+        const hangs = (column: ColumnRef, other: ColumnRef): void => {
+            const ref = this.resolve(column, chain);
+            const host = this.resolve(other, chain);
+            const info = ref && this.info(ref);
+            if (!ref || !host || !info || rowIdOf(info) !== column.name) return;
+            const at = block.refs.indexOf(ref);
+            const before = block.refs.indexOf(host);
+            if (before !== -1 && before < at) out.add(ref);
+        };
+        const walk = (cond: Cond): void => {
+            if (cond.kind === 'and') cond.items.forEach(walk);
+            else if (cond.kind === 'only') walk(cond.item);
+            else if (cond.kind === 'link') {
+                hangs(cond.left, cond.right);
+                hangs(cond.right, cond.left);
+            }
+        };
+        walk(block.cond);
+        return out;
+    }
+
     check(query: Query, chain: readonly Block[], env: Anchored): void {
         if (this.checked.has(query)) return;
         this.checked.add(query);
         for (const block of query) {
             const all = union(env, this.anchors(block.cond, [...chain, block], env));
+            // Elle suit le sort de la table qui la nomme : c'est celle-là qui se relève, ou pas.
+            const named = this.named(block, [...chain, block]);
             for (const ref of block.refs) {
                 if (ref.query !== null) {
                     this.check(ref.query, chain, env);
@@ -336,7 +401,7 @@ class Analysis {
                 }
                 if (ref.table === null || ref.foreign) continue;
                 const scope = this.owned(ref.table);
-                if (!scope || all.has(ref)) continue;
+                if (!scope || all.has(ref) || named.has(ref)) continue;
                 const on = scope.columns.join(' ou ');
                 this.add(
                     'unbounded',
@@ -399,13 +464,13 @@ export function scopeFindings(
 export type CallVerdict = 'bounded' | 'exempt' | 'unbounded' | 'unclassified' | 'unread';
 
 /**
- * Une dispense couvre une table sans borne, jamais une requête illisible ni
- * une table sans classe : celles-là se corrigent, elles ne se justifient pas.
+ * Une dispense couvre une table sans borne, ou une requête que l'outil ne sait
+ * pas lire. Jamais une table sans classe : celle-là se déclare.
  */
 export function callVerdict(findings: readonly Finding[], exempt: boolean): CallVerdict {
     const has = (kind: Finding['kind']): boolean => findings.some((f) => f.kind === kind);
-    if (has('unread')) return 'unread';
     if (has('unclassified')) return 'unclassified';
+    if (has('unread')) return exempt ? 'exempt' : 'unread';
     if (has('unbounded')) return exempt ? 'exempt' : 'unbounded';
     return 'bounded';
 }

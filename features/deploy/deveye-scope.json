@@ -1,0 +1,64 @@
+{
+  "exempt": {
+    "src/server/copy.ts#deployCopy.plan": {
+      "kind": "row",
+      "reason": "La copie vient de constater que la cible habite l'espace de l'appelant (loadHome, par findVisibleTarget)."
+    },
+    "src/server/move.ts#deployMove.plan": {
+      "kind": "row",
+      "reason": "Le déplacement vient de constater que la cible habite l'espace de l'appelant (loadHome, par findVisibleTarget)."
+    },
+    "src/server/repo.ts#clearCredentialUnreachable": {
+      "kind": "service",
+      "reason": "Le rapprochement de fond écrit sur l'accès qu'il vient de relire dans l'espace de sa cible (findCredential)."
+    },
+    "src/server/repo.ts#deploymentActivity": {
+      "kind": "row",
+      "reason": "Le contrat offert à Uptime vient de relire la cible visible depuis l'espace du demandeur (findVisibleTarget)."
+    },
+    "src/server/repo.ts#findDeployment": {
+      "kind": "service",
+      "reason": "Le suivi de fond relit un déploiement qu'il tient déjà : relu dans l'espace de sa cible (listDeployments), ou créé par la commande qui lui en confie le suivi."
+    },
+    "src/server/repo.ts#findTargetSync": {
+      "kind": "row",
+      "reason": "Le contrat offert à Uptime vient de relire la cible visible depuis l'espace du demandeur (findVisibleTarget) avant de la rapprocher."
+    },
+    "src/server/repo.ts#listInFlightAgentDeployments": {
+      "kind": "service",
+      "reason": "La reprise au démarrage relève les déploiements par machine restés en vol dans tous les espaces."
+    },
+    "src/server/repo.ts#listTargetsDue": {
+      "kind": "service",
+      "reason": "Le rapprochement de fond relève les cibles dues de tous les espaces."
+    },
+    "src/server/repo.ts#listTargetsOfCredential": {
+      "kind": "service",
+      "reason": "L'avis d'un lien perdu ou rétabli nomme les cibles de l'accès que le rapprochement de fond vient de relire dans son espace."
+    },
+    "src/server/repo.ts#markCredentialNotified": {
+      "kind": "service",
+      "reason": "Le rapprochement de fond écrit sur l'accès qu'il vient de relire dans l'espace de sa cible (findCredential)."
+    },
+    "src/server/repo.ts#markCredentialUnreachable": {
+      "kind": "service",
+      "reason": "Le rapprochement de fond écrit sur l'accès qu'il vient de relire dans l'espace de sa cible (findCredential)."
+    },
+    "src/server/repo.ts#markDeploymentNotified": {
+      "kind": "service",
+      "reason": "Le suivi de fond marque un déploiement qu'il tient déjà : relevé en vol, relu dans l'espace de sa cible (listDeployments) ou créé par lui."
+    },
+    "src/server/repo.ts#markTargetSynced": {
+      "kind": "service",
+      "reason": "Le rapprochement de fond horodate la cible qu'il vient de relever."
+    },
+    "src/server/repo.ts#setDeploymentContent": {
+      "kind": "service",
+      "reason": "Le suivi de fond réécrit un déploiement qu'il tient déjà : relu dans l'espace de sa cible (listDeployments) ou créé par lui."
+    },
+    "src/server/repo.ts#updateDeployment": {
+      "kind": "row",
+      "reason": "Le déploiement vient d'être créé par la commande, ou le suivi de fond le tient déjà : relevé en vol, ou relu dans l'espace de sa cible (listDeployments)."
+    }
+  }
+}

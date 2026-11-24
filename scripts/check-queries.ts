@@ -16,9 +16,10 @@
  * réduit pas à des chaînes connues est compté à part (`--verbose` le liste).
  * `// check-queries: ignore <raison>` juste avant un appel l'écarte.
  *
- * `--scope-report` fait autre chose, sans rien préparer ni faire échouer : il
- * dit de chaque requête si les tables qu'elle cite sont bornées à un espace ou
- * à un compte (`lib/query-scope.ts`), dépôt par dépôt.
+ * Puis chaque requête est relue pour son cloisonnement (`lib/scope-pass.ts`) :
+ * les tables qu'elle cite sont-elles bornées à un espace ou à un compte ?
+ * `--scope-report` ne fait que cela, sans rien préparer ni faire échouer, et
+ * compte dépôt par dépôt.
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,7 +44,7 @@ import {
     type SchemaColumn
 } from './lib/query-check';
 import { findQueryCalls, ignoreReason, loadProgram, paramCount, whereOf } from './lib/query-calls';
-import { scopeReport } from './lib/scope-pass';
+import { scopePass } from './lib/scope-pass';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORKSPACE = path.dirname(ROOT);
@@ -180,8 +181,9 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
+    const scope = { program, conn, root: ROOT, workspace: WORKSPACE, verbose: VERBOSE };
     if (SCOPE_REPORT) {
-        await scopeReport({ program, conn, root: ROOT, workspace: WORKSPACE, verbose: VERBOSE });
+        await scopePass({ ...scope, report: true });
         conn.end();
         return;
     }
@@ -244,6 +246,7 @@ async function main(): Promise<void> {
 
     const calls = findQueryCalls(program, WORKSPACE);
     for (const call of calls) await checkCall(call);
+    const unbounded = await scopePass({ ...scope, report: false });
     conn.end();
 
     const seen = new Set<string>();
@@ -259,10 +262,13 @@ async function main(): Promise<void> {
         `check-queries: ${stats.calls} appel(s), ${stats.checked} préparé(s), ` +
             `${dynamic.length} dynamique(s)${VERBOSE ? '' : ' (--verbose les liste)'}, ${stats.ignored} écarté(s)`
     );
-    if (unique.length > 0) {
-        console.error(`check-queries: ${unique.length} écart(s) entre le code et la base`);
-        process.exit(1);
+    if (unique.length > 0) console.error(`check-queries: ${unique.length} écart(s) entre le code et la base`);
+    if (unbounded > 0) {
+        console.error(
+            `check-queries: ${unbounded} faute(s) de cloisonnement (--scope-report --verbose les détaille, Docs/CREATING_A_FEATURE.md dit quoi en faire)`
+        );
     }
+    if (unique.length + unbounded > 0) process.exit(1);
 }
 
 void main();

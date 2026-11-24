@@ -1,0 +1,98 @@
+{
+  "tables": {},
+  "keys": {},
+  "exempt": {
+    "src/server/copy.ts#appStoresCopy.plan": {
+      "kind": "row",
+      "reason": "La copie a relu l'app dans l'espace de l'appelant (loadHome) avant d'en demander le plan."
+    },
+    "src/server/move.ts#appStoresMove.plan": {
+      "kind": "row",
+      "reason": "Le déplacement a relu l'app dans l'espace de l'appelant (loadHome) avant d'en demander le plan."
+    },
+    "src/server/move.ts#refsTaken": {
+      "kind": "row",
+      "reason": "Le déplacement a relu l'app dans l'espace de l'appelant (loadHome), et seuls les condensés de ses fiches sont comparés à ceux de la cible."
+    },
+    "src/server/repo.ts#clearMetricsSync": {
+      "kind": "service",
+      "reason": "La synchronisation écrit sur une fiche qu'elle vient de relever."
+    },
+    "src/server/repo.ts#clearSourceFailure": {
+      "kind": "row",
+      "reason": "La source vient d'être relue : par la commande dans l'espace de l'appelant (loadSource), ou par la synchronisation pour sa passe."
+    },
+    "src/server/repo.ts#deleteListing": {
+      "kind": "row",
+      "reason": "L'app vient d'être relue chez elle, dans l'espace de l'appelant (loadHomeApp)."
+    },
+    "src/server/repo.ts#findReview": {
+      "kind": "lookup",
+      "reason": "L'avis se lit par son identifiant, et la commande confronte son app à l'espace de l'appelant (loadHomeApp) avant d'y toucher."
+    },
+    "src/server/repo.ts#findSourceById": {
+      "kind": "service",
+      "reason": "La synchronisation relit la source d'une fiche qu'elle a relevée, et createSource celle qu'il vient d'insérer."
+    },
+    "src/server/repo.ts#listAppIdsOfSource": {
+      "kind": "row",
+      "reason": "La source vient d'être relue : par la commande dans l'espace de l'appelant (loadSource), ou par la synchronisation pour sa passe."
+    },
+    "src/server/repo.ts#listAppsByIds": {
+      "kind": "row",
+      "reason": "Les apps sont celles des fiches d'une source déjà relue, par la commande dans l'espace de l'appelant ou par la synchronisation."
+    },
+    "src/server/repo.ts#listDue": {
+      "kind": "service",
+      "reason": "La synchronisation relève les fiches dues de tous les espaces."
+    },
+    "src/server/repo.ts#listListingsOfApps": {
+      "kind": "row",
+      "reason": "Les apps viennent d'être relues, de l'espace de l'appelant ou par un partage (loadApp, listVisibleApps), ou confiées à la synchronisation par une commande qui l'a fait."
+    },
+    "src/server/repo.ts#listListingsOfSource": {
+      "kind": "service",
+      "reason": "La synchronisation relit les fiches de la source dont elle ouvre la passe."
+    },
+    "src/server/repo.ts#markSourceNotified": {
+      "kind": "service",
+      "reason": "La synchronisation note l'avis parti sur la source dont elle finit la passe."
+    },
+    "src/server/repo.ts#overflowingReviews": {
+      "kind": "service",
+      "reason": "La purge quotidienne cherche, parmi toutes les apps, celles qui gardent trop d'avis."
+    },
+    "src/server/repo.ts#purgeCountriesBefore": {
+      "kind": "service",
+      "reason": "La purge quotidienne retire les pays anciens de toutes les apps."
+    },
+    "src/server/repo.ts#purgeReviewsBefore": {
+      "kind": "service",
+      "reason": "La purge quotidienne retire les avis anciens de toutes les apps."
+    },
+    "src/server/repo.ts#recordRefusal": {
+      "kind": "service",
+      "reason": "La synchronisation note le refus sur la source dont elle finit la passe."
+    },
+    "src/server/repo.ts#resetRating": {
+      "kind": "row",
+      "reason": "L'app vient d'être relue chez elle, dans l'espace de l'appelant (loadHomeApp)."
+    },
+    "src/server/repo.ts#saveCoverage": {
+      "kind": "service",
+      "reason": "La synchronisation écrit sur une fiche qu'elle vient de relever."
+    },
+    "src/server/repo.ts#saveListing": {
+      "kind": "service",
+      "reason": "La synchronisation écrit sur une fiche qu'elle vient de relever."
+    },
+    "src/server/repo.ts#setListingSource": {
+      "kind": "row",
+      "reason": "La fiche est celle d'une app relue chez elle, dans l'espace de l'appelant (loadHomeApp)."
+    },
+    "src/server/repo.ts#updateReview": {
+      "kind": "row",
+      "reason": "L'avis vient d'être relu : par la commande, son app confrontée à l'espace de l'appelant (loadHomeApp), ou par la synchronisation dans l'app de la fiche qu'elle relève."
+    }
+  }
+}

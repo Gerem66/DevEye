@@ -1,0 +1,23 @@
+{
+  "tables": {},
+  "keys": {
+    "ft_invoicing_docs": {
+      "columns": ["public_token"],
+      "reason": "Le jeton du lien public d'un document, tiré au hasard : qui le présente lit le document et répond au devis."
+    }
+  },
+  "exempt": {
+    "src/server/repo.ts#listDocs": {
+      "kind": "bounded",
+      "reason": "La clause s'assemble dans la fonction et commence toujours par d.workspace_id = ?, comme chacun des sous-totaux joints."
+    },
+    "src/server/repo.ts#markReminded": {
+      "kind": "service",
+      "reason": "Le relanceur marque les factures qu'il vient de relever."
+    },
+    "src/server/repo.ts#overdueToRemind": {
+      "kind": "service",
+      "reason": "Le relanceur relève les factures échues de tous les espaces."
+    }
+  }
+}

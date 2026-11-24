@@ -39,7 +39,11 @@ L'espace personnel est une vraie ligne de `workspaces`, pointée par
 Ce pointeur plutôt qu'un index unique sur `(kind, owner_user_id)` : ce dernier
 limiterait chaque compte à un seul espace _partagé_ possédé, ce qui est faux.
 Toute requête de donnée filtre sur `workspace_id` : c'est la colonne qui
-cloisonne, `user_id` ne sert qu'à l'attribution.
+cloisonne, `user_id` ne sert qu'à l'attribution. `npm run check:queries` le
+vérifie sur chaque requête du socle et des modules, et une requête qui lit
+au-delà de son espace (un service de fond, une page d'administration, une ligne
+désignée par un jeton) le dit dans la déclaration de son dépôt, avec sa raison
+(`Docs/CREATING_A_FEATURE.md`, partie F).
 
 ---
 

@@ -1,0 +1,67 @@
+{
+  "tables": {},
+  "keys": {
+    "ft_uptime_pages": {
+      "columns": ["public_ref"],
+      "reason": "La référence publique d'une page de statut, tirée au hasard : qui la tient lit la page."
+    },
+    "uptime_services": {
+      "columns": ["deploy_hook_hash"],
+      "reason": "Le condensé du jeton de l'adresse d'appel : seul qui a reçu l'adresse le détient."
+    }
+  },
+  "exempt": {
+    "src/server/repo.ts#checkStats": {
+      "kind": "bounded",
+      "reason": "La clause assemblée commence toujours par service_id = ?, pour un service que la commande vient de lire par findVisible (son espace ou un partage)."
+    },
+    "src/server/repo.ts#closeIncident": {
+      "kind": "row",
+      "reason": "L'incident vient d'être relu par openIncident, pour un service que la sonde ou la pause de l'offre désigne, ou que la commande a lu par findVisible."
+    },
+    "src/server/repo.ts#listChecks": {
+      "kind": "bounded",
+      "reason": "La clause assemblée commence toujours par service_id = ?, pour un service que la commande vient de lire par findVisible (son espace ou un partage)."
+    },
+    "src/server/repo.ts#listDue": {
+      "kind": "service",
+      "reason": "L'ordonnanceur relève les services dus de tous les espaces."
+    },
+    "src/server/repo.ts#listReadings": {
+      "kind": "bounded",
+      "reason": "La clause assemblée commence toujours par service_id = ?, pour un service que la commande vient de lire par findVisible (son espace ou un partage)."
+    },
+    "src/server/repo.ts#markDeployHookCalled": {
+      "kind": "row",
+      "reason": "Le service vient d'être relu par le condensé du jeton de son adresse d'appel."
+    },
+    "src/server/repo.ts#markIncidentNotified": {
+      "kind": "service",
+      "reason": "La sonde marque l'incident qu'elle vient d'ouvrir."
+    },
+    "src/server/repo.ts#pruneByRetention": {
+      "kind": "service",
+      "reason": "La rétention élague les mesures et les lectures anciennes de tous les espaces."
+    },
+    "src/server/repo.ts#recordIntegrity": {
+      "kind": "service",
+      "reason": "La sonde écrit sa lecture sur le service qu'elle vient de sonder : relevé par l'ordonnanceur, ou remis par une commande qui l'a lu par findVisible."
+    },
+    "src/server/repo.ts#recordProbe": {
+      "kind": "service",
+      "reason": "La sonde écrit son résultat sur le service qu'elle vient de sonder : relevé par l'ordonnanceur, ou remis par une commande qui l'a lu par findVisible."
+    },
+    "src/server/repo.ts#resetIntegrity": {
+      "kind": "row",
+      "reason": "Le service vient d'être lu par findVisible (espace de l'appelant ou partage), avec le droit d'écriture sur l'élément."
+    },
+    "src/server/repo.ts#setDeployHook": {
+      "kind": "row",
+      "reason": "Le service vient d'être lu par findVisible (espace de l'appelant ou partage), avec le droit d'écriture sur l'élément."
+    },
+    "src/server/repoPages.ts#findByDomain": {
+      "kind": "row",
+      "reason": "Le domaine vient d'être lu dans l'espace de l'appelant (ctx.domains.get) ou résolu par le nom d'hôte de la requête, et une page ne prend qu'un domaine de son propre espace."
+    }
+  }
+}
