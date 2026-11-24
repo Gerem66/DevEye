@@ -155,7 +155,6 @@ declare const styles: {
     readonly syncProgressFill: string;
     readonly syncProgressIndeterminate: string;
     readonly syncProgressTrack: string;
-    readonly tierNote: string;
     readonly toolbar: string;
     readonly toolbarActions: string;
 };

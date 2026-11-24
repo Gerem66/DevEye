@@ -125,6 +125,7 @@ export function createSdkContext(
         transport: socketTransport(ctx, manifest),
         secrecy: {
             isUnlocked: () => ctx.secure.isUnlocked(),
+            isPasswordProtected: () => ctx.secure.isPasswordGated(),
             // Signé par l'hôte, lié à la session de l'appelant et à ce module
             // (l'audience) ; son service le rend contre les codecs de l'appelant.
             ticket: (payload, opts) =>

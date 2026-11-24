@@ -714,7 +714,14 @@ droits là-bas : c'est le navigateur qui porte une donnée d'un espace à l'autr
 comme pour la copie d'un élément ; `commandsApi(commands)` fait de même pour
 les commandes de transport `agent.*`. Le chiffrement par mot de passe se lit
 par `useSecrecy()`, `ensureSecrecyUnlocked()` et `withSecrecy(run)` (réessaie
-une fois après l'invite) ; `humanizeError` traduit les codes, `locked` et
+une fois après l'invite). Un module qui laisse choisir l'étage d'un élément
+(une boîte mail, une base) le propose par `SecurityTierChoice` : deux cartes,
+« Ouverte » et « Protégée », dont le module écrit les deux descriptions, ce
+que chaque étage permet et coûte pour cet élément. La carte protégée
+s'explique au lieu de s'offrir quand le compte n'a pas le chiffrement par mot
+de passe, ou pour la raison que le module donne (`unavailable` : un espace
+partagé). Le serveur du module refuse de son côté ce que la carte n'offre
+pas, par `ctx.secrecy.isPasswordProtected()`. `humanizeError` traduit les codes, `locked` et
 `timeout` compris. Tout échec montré passe par `ErrorNote`, qui prend une note
 `{ message, code }` : `useResource` rend la sienne dans `error`, `errorNote(e,
 repli)` la construit dans un `catch`. Le code décide du bouton « Signaler » :
@@ -822,6 +829,9 @@ test('la commande affichée suit le code reçu', async () => {
 - Une commande partie sans réponse déclarée fait échouer le test, sauf celles
   que le client envoie de lui-même à chaque ouverture, qui reçoivent la réponse
   d'un compte ordinaire. `server.calls(commande)` rend ce qui a été reçu.
+- `server.workspace('personal' | 'shared')` assoit le test dans un espace dont
+  l'appelant est propriétaire ; sans cet appel, aucun espace n'est actif et
+  `useActiveWorkspace()` rend `null`.
 - Les éléments se cherchent comme une personne les trouve : par rôle et par
   nom (`getByRole('button', { name: 'Copier la commande' })`), pas par classe.
 - Jamais un élément du DOM dans `assert.equal` ou `deepEqual` : à l'échec, Node
@@ -925,7 +935,10 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
   délai de l'appelant, et alimente son opération longue quand il en a ouvert
   une, que les autres onglets de son compte suivent alors aussi
   ([TASKS.md](./TASKS.md)) ;
-- `secrecy.isUnlocked()` et `secrecy.ticket(payload, { ttlSeconds })` ;
+- `secrecy.isUnlocked()`, `secrecy.isPasswordProtected()` (l'étage gardé
+  est-il vraiment sous le mot de passe du compte : espace personnel,
+  chiffrement par mot de passe activé ; à demander avant de laisser dire un
+  élément « protégé ») et `secrecy.ticket(payload, { ttlSeconds })` ;
 - `items` (`restrictions`, `assert`, `canExtra`, `forget`) ;
 - `quota` (`limit`, `assert`, `usage`, `assertActive`, `paid`, `isPaused`,
   `paused`) ;

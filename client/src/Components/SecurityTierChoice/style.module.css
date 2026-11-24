@@ -1,0 +1,11 @@
+.note {
+    margin: var(--space-sm) 0 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.warning {
+    margin: var(--space-sm) 0 0;
+    color: var(--warning);
+    font-size: 0.85rem;
+}

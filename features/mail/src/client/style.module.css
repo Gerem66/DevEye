@@ -1641,12 +1641,6 @@
 
 /* Sous les cartes de protection, à la création : lever l'inquiétude d'un choix
    qu'on ne comprend pas encore. */
-.tierNote {
-    margin: var(--space-sm) 0 0;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-}
-
 /* Le menu ⋯ d'un dossier : à droite de la ligne, visible au survol ou au clavier. */
 .folderItem {
     position: relative;

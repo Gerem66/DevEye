@@ -9,12 +9,14 @@ import {
     type CommandOutput,
     type ErrorCode,
     type FeatureCommandName,
-    type ServerMessage
+    type ServerMessage,
+    type WorkspaceKind
 } from '@deveye/types';
 import type { FeatureManifest } from '@deveye/types/sdk';
 import type { z, ZodType } from 'zod';
 
 import { ws } from '@/api/ws';
+import { resetWorkspace, syncWorkspacesFromServer } from '@/stores/workspace';
 
 /**
  * Le serveur des tests de composants. Il ne remplace que la socket du
@@ -59,6 +61,11 @@ export interface FakeServer {
     connect(): Promise<void>;
     /** Un événement que personne n'a demandé. */
     push(command: string, data: unknown): void;
+    /**
+     * Assoit le test dans un espace dont l'appelant est propriétaire, comme la
+     * session le livre à la connexion. Sans cet appel, aucun espace n'est actif.
+     */
+    workspace(kind: WorkspaceKind): void;
 }
 
 type Listener = (event: { data?: string; code?: number }) => void;
@@ -167,6 +174,7 @@ export function fakeServer(): FakeServer {
         answers = new Map(AT_OPENING);
         received = [];
         problems = [];
+        resetWorkspace();
         globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;
     });
 
@@ -191,6 +199,25 @@ export function fakeServer(): FakeServer {
         push: (command, data) => {
             assert.ok(FakeSocket.open, 'push : la socket n’est pas ouverte');
             FakeSocket.open.deliver({ command, payload: { ok: true, data } });
-        }
+        },
+        workspace: (kind) =>
+            syncWorkspacesFromServer(
+                [
+                    {
+                        id: 1,
+                        kind,
+                        name: 'Essai',
+                        logo: '',
+                        ownerUserId: 1,
+                        users: [],
+                        features: [],
+                        created: 0,
+                        planPaused: false,
+                        pausedMemberIds: []
+                    }
+                ],
+                1,
+                { isOwner: true, capabilities: [], features: [], itemOverrides: [] }
+            )
     };
 }

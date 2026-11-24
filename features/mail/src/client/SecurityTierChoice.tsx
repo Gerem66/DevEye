@@ -1,7 +1,6 @@
-import { ChoiceCards, Term, useSecrecy } from 'deveye-sdk-client';
+import { SecurityTierChoice as TierChoice, Term } from 'deveye-sdk-client';
 
 import type { MailSecurityTier } from '../contracts/domain';
-import styles from './style.module.css';
 
 interface SecurityTierChoiceProps {
     value: MailSecurityTier;
@@ -20,60 +19,35 @@ interface SecurityTierChoiceProps {
 /**
  * Le choix de protection d'une boîte, identique sur les deux surfaces qui le
  * proposent : le formulaire de création et l'onglet Chiffrement des réglages.
- *
- * Sans chiffrement par mot de passe sur le compte, une boîte « protégée »
- * resterait lisible par le serveur : le choix s'explique au lieu de s'offrir.
+ * Ce qu'une boîte gagne et perd à chaque étage est dit ici ; le reste est le
+ * choix d'étage du SDK.
  */
 export function SecurityTierChoice({ value, onChange, disabled, pending, onPick, advise }: SecurityTierChoiceProps) {
-    const secrecy = useSecrecy();
-
     return (
-        <>
-            <ChoiceCards
-                aria-label='Protection de la boîte'
-                value={value}
-                onChange={onChange}
-                disabled={disabled}
-                pending={pending}
-                onPick={onPick}
-                options={[
-                    {
-                        value: 'open',
-                        label: 'Ouverte',
-                        hint: advise ? '(recommandé)' : undefined,
-                        icon: 'icon-unlock',
-                        description: (
-                            <p>
-                                Relevée automatiquement en arrière-plan, et utilisable par les autres fonctionnalités,
-                                par exemple pour envoyer les alertes d’Uptime. En contrepartie, le serveur garde de quoi
-                                la lire à tout moment.
-                            </p>
-                        )
-                    },
-                    {
-                        value: 'guarded',
-                        label: 'Protégée',
-                        icon: 'icon-lock',
-                        description: (
-                            <p>
-                                Protégée par le <Term id='passwordEncryption'>chiffrement par mot de passe</Term> : une
-                                fois votre session verrouillée, ni le serveur ni aucune autre fonctionnalité ne peut la
-                                lire. En contrepartie, elle ne se relève que lorsque vous la consultez, et ne peut
-                                envoyer aucune alerte.
-                            </p>
-                        ),
-                        unavailable:
-                            secrecy.enabled || value === 'guarded'
-                                ? undefined
-                                : 'Activez d’abord le chiffrement par mot de passe, dans Sécurité.'
-                    }
-                ]}
-            />
-            {advise && (
-                <p className={styles.tierNote}>
-                    Ce choix se change quand vous voulez, dans les réglages de la boîte : rien n’est définitif ici.
+        <TierChoice
+            aria-label='Protection de la boîte'
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+            pending={pending}
+            onPick={onPick}
+            advise={
+                advise &&
+                'Ce choix se change quand vous voulez, dans les réglages de la boîte : rien n’est définitif ici.'
+            }
+            open={
+                <p>
+                    Relevée automatiquement en arrière-plan, et utilisable par les autres fonctionnalités, par exemple
+                    pour envoyer les alertes d’Uptime. En contrepartie, le serveur garde de quoi la lire à tout moment.
                 </p>
-            )}
-        </>
+            }
+            guarded={
+                <p>
+                    Protégée par le <Term id='passwordEncryption'>chiffrement par mot de passe</Term> : une fois votre
+                    session verrouillée, ni le serveur ni aucune autre fonctionnalité ne peut la lire. En contrepartie,
+                    elle ne se relève que lorsque vous la consultez, et ne peut envoyer aucune alerte.
+                </p>
+            }
+        />
     );
 }

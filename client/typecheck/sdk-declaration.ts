@@ -49,7 +49,9 @@ const types: [
     Same<real.Task, declared.Task>,
     Same<real.TaskOptions, declared.TaskOptions>,
     Same<real.TaskContext, declared.TaskContext>,
+    Same<real.SecurityTier, declared.SecurityTier>,
+    Same<real.SecurityTierChoiceProps, declared.SecurityTierChoiceProps>,
     NotAny<Parameters<Declared['featureApi']>[0]>,
     NotAny<ReturnType<Declared['useWorkspacePermissions']>['canFeature']>
-] = [true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true];
 void types;

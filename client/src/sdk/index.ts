@@ -123,6 +123,8 @@ export { get as httpGet, httpFetch } from '@/api/http';
 export { default as ReadOnlyNotice } from '@/Components/FeatureSettings/ReadOnlyNotice';
 /** La phrase d'un identifiant que le serveur relit seul, à poser dans l'aide de son champ. */
 export { default as ServerHeldNote } from '@/Components/ServerHeldNote';
+export { default as SecurityTierChoice } from '@/Components/SecurityTierChoice';
+export type { SecurityTier, SecurityTierChoiceProps } from '@/Components/SecurityTierChoice';
 /** Le bandeau de ce qui ne prévient personne, et le bouton vers son onglet Notifications. */
 export { default as NotificationsNotice } from '@/Components/FeatureSettings/NotificationsNotice';
 /** Le bandeau d'un refus : la phrase, les gestes de réparation passés en
