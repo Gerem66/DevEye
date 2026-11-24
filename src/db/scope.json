@@ -1,6 +1,10 @@
 {
   "$comment": "Le cloisonnement des requêtes du socle (npm run check:queries, Docs/CREATING_A_FEATURE.md). « tables » : la classe de celles qui ne portent pas workspace_id. « exempt » : les fonctions dont une requête n'est pas bornée, et pourquoi.",
   "tables": {
+    "_data_steps": {
+      "class": "instance",
+      "reason": "Le registre des étapes de données jouées."
+    },
     "_migrations": {
       "class": "instance",
       "reason": "Le registre des migrations appliquées."

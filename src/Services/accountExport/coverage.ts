@@ -44,7 +44,8 @@ export const CORE_EXPORT_TABLES: Readonly<Record<string, 'host' | { skip: string
     feature_maintenance: { skip: 'Un réglage du serveur, pas du compte.' },
     instance_settings: { skip: 'Un réglage du serveur, pas du compte.' },
     debug_runs: { skip: 'Les essais de la page Tests et débogage appartiennent au serveur.' },
-    _migrations: { skip: 'Le registre des migrations appartient au serveur.' }
+    _migrations: { skip: 'Le registre des migrations appartient au serveur.' },
+    _data_steps: { skip: 'Le registre des étapes de données appartient au serveur.' }
 };
 
 /**

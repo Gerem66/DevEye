@@ -183,7 +183,12 @@ async function buildContext(
         const home = await ctx.db.workspaces.findById(homeWorkspaceId);
         const full = home && (await stockBlocker(ctx, feature, itemId, home.owner_user_id, target));
         if (full) blockers.push(full);
-        const plan = await move.plan(itemId, homeWorkspaceId, targetId);
+        const plan = await move.plan(
+            itemId,
+            homeWorkspaceId,
+            targetId,
+            createOpenCipher(ctx.db, ctx.crypt, homeWorkspaceId)
+        );
         blockers.push(...plan.blockers);
         rows = plan.rows;
         drops = [...plan.drops];

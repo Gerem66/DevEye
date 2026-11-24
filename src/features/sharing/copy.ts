@@ -41,11 +41,17 @@ const MAX_BYTES = 16 * 1024 * 1024;
 /** Tous comptes confondus, dans un sens : une instance partagée ne se laisse pas remplir la mémoire. */
 const MAX_BYTES_IN_FLIGHT = 128 * 1024 * 1024;
 
+/**
+ * Le contrat du paquet. Il monte quand ce qui voyage change sans que la version
+ * de l'app le dise : un paquet d'un autre format est refusé d'un mot.
+ */
+const BUNDLE_FORMAT = 2;
+
 /** Deux versions parlent le même contrat quand majeur et mineur coïncident. */
 const releaseOf = (version: string): string => version.split('.').slice(0, 2).join('.');
 
 const bundleSchema = z.object({
-    format: z.literal(1),
+    format: z.literal(BUNDLE_FORMAT),
     feature: z.string(),
     appVersion: z.string(),
     tier: itemTierSchema,
@@ -137,7 +143,13 @@ const exportFeature = defineFeature({
         // Le chiffre du palier : `ctx.secure` lève `locked` tant que le coffre
         // est fermé, et l'écran le rouvre puis rappelle.
         const rows = await copy.read(input.itemId, tier === 'private' ? ctx.secure : ctx.secure.open);
-        const json = JSON.stringify({ format: 1, feature: input.feature, appVersion: appVersion(), tier, rows });
+        const json = JSON.stringify({
+            format: BUNDLE_FORMAT,
+            feature: input.feature,
+            appVersion: appVersion(),
+            tier,
+            rows
+        });
         const bytes = Buffer.byteLength(json);
         if (bytes > MAX_BYTES) {
             throw new FeatureError('validation', 'Cet élément est trop volumineux pour être copié.');

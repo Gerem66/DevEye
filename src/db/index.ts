@@ -5,6 +5,7 @@ import { feedbackRepo, type FeedbackRepo } from './repos/feedback';
 import { logsRepo, type LogsRepo } from './repos/logs';
 import { maintenanceRepo, type MaintenanceRepo } from './repos/maintenance';
 import { serverRefKeyRepo, type ServerRefKeyRepo } from './repos/serverRefKey';
+import { dataStepsRepo, type DataStepsRepo } from './repos/dataSteps';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { featureDomainsRepo, type FeatureDomainsRepo } from './repos/featureDomains';
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
@@ -62,6 +63,7 @@ export interface Database {
     /** La maintenance du site et des features (voir `Services/maintenance.ts`). */
     maintenance: MaintenanceRepo;
     serverRefKey: ServerRefKeyRepo;
+    dataSteps: DataStepsRepo;
     devices: DevicesRepo;
     linkCodes: LinkCodesRepo;
     metrics: MetricsRepo;
@@ -123,6 +125,7 @@ export function databaseOn(q: Queryable, begin: BeginTransaction): Database {
         feedback: feedbackRepo(q),
         maintenance: maintenanceRepo(q),
         serverRefKey: serverRefKeyRepo(q),
+        dataSteps: dataStepsRepo(q),
         devices: devicesRepo(q),
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),

@@ -9,6 +9,7 @@ import { createAuditLog } from '@/Services/AuditLog';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { appVersion } from '@/version';
 import { createDatabase } from '@/db';
+import { runDataSteps } from '@/db/dataSteps';
 import { runMigrations } from '@/db/migrate';
 import { loadRefKeys, setRefKeys } from '@/Services/refKeys';
 import { assertSealFormat } from '@/Services/sealFormat';
@@ -16,6 +17,7 @@ import { createDbPool, getQueryable, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
 import {
     installedSealTargets,
+    moduleDataSteps,
     moduleExportDeclarations,
     moduleListeners,
     moduleMigrationDirs,
@@ -88,6 +90,8 @@ async function main() {
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
     try {
         setRefKeys(await loadRefKeys(db.serverRefKey, crypt));
+        // Avant `buildApp` : aucun service ni aucune requête ne doit voir des lignes à moitié reprises.
+        await runDataSteps(db, moduleDataSteps(crypt));
     } catch (e) {
         logger.fatal((e as Error).message);
         process.exit(1);

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { FeatureError, movableCellsOf, type SdkCipher, type SdkQueryable } from '@deveye/types/sdk/server';
+import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { appStoresTree } from './copy';
 import { appStoresMove } from './move';
@@ -17,6 +18,7 @@ const ciphers = {
     from: { encrypt: async (v: string) => v, tryDecrypt: async (v: string) => v } as unknown as SdkCipher,
     to: { encrypt: async (v: string) => v, tryDecrypt: async (v: string) => v } as unknown as SdkCipher
 };
+const { keys } = createTestContext();
 
 function recording(answers: { taken?: number; sourced?: number; affected?: number } = {}) {
     const writes: { sql: string; params: unknown[] }[] = [];
@@ -53,7 +55,9 @@ describe('le déplacement d’une app', () => {
             repo: fakeRepo(),
             itemId: '1',
             fromWorkspaceId: 1,
-            toWorkspaceId: 2
+            toWorkspaceId: 2,
+            cipher: ciphers.from,
+            keys
         });
         assert.deepEqual(plan.blockers, ['Cette app est déjà suivie dans cet espace.']);
         assert.equal(plan.drops.length, 1);
@@ -62,7 +66,15 @@ describe('le déplacement d’une app', () => {
 
     it('change l’espace de ses fiches et leur retire la source ; les chiffres suivent l’app', async () => {
         const { q, writes } = recording();
-        await appStoresMove.apply({ q, repo: fakeRepo(), itemId: '1', fromWorkspaceId: 1, toWorkspaceId: 2, ciphers });
+        await appStoresMove.apply({
+            q,
+            repo: fakeRepo(),
+            itemId: '1',
+            fromWorkspaceId: 1,
+            toWorkspaceId: 2,
+            ciphers,
+            keys
+        });
         assert.deepEqual(
             writes.map((w) => [w.sql, w.params]),
             [
@@ -85,7 +97,15 @@ describe('le déplacement d’une app', () => {
     it('s’annule quand l’app n’est plus dans l’espace quitté', async () => {
         const { q } = recording({ affected: 0 });
         await assert.rejects(
-            appStoresMove.apply({ q, repo: fakeRepo(), itemId: '1', fromWorkspaceId: 1, toWorkspaceId: 2, ciphers }),
+            appStoresMove.apply({
+                q,
+                repo: fakeRepo(),
+                itemId: '1',
+                fromWorkspaceId: 1,
+                toWorkspaceId: 2,
+                ciphers,
+                keys
+            }),
             (e) => e instanceof FeatureError && e.code === 'not_found'
         );
     });

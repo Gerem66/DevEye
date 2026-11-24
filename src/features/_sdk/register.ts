@@ -45,6 +45,7 @@ import { readFileSync } from 'node:fs';
 import type { Readable } from 'node:stream';
 
 import type { Database } from '@/db';
+import type { ModuleDataSteps } from '@/db/dataSteps';
 import type { Queryable } from '@/db/pool';
 import { defineFeature, type FeatureContext, type FeatureDefinition, type ItemResolver } from '@/features/_define';
 import type {
@@ -63,10 +64,11 @@ import { tasks } from '@/Services/tasks';
 import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
 import type { UsageSource } from '@/Services/quotaUsage';
 import type Encryption from '@/Services/Encryption';
+import { createOpenCipher } from '@/Services/SecureStore';
 import type { CoverageModule } from '@/Services/accountExport/coverage';
 import { sealTargets, type SealTarget } from '@/Services/sealTargets';
 import type { ExportModule } from '@/Services/accountExport/run';
-import { serverKeysOf } from './host';
+import { moduleRefKeys, serverKeysOf } from './host';
 import { createSdkContext, ORIGINS } from './context';
 import { createDomainsContext, sdkFleetDomains, type DomainsHost } from './domains';
 import { createQuota, modulePauses, quotaCounter } from './quota';
@@ -311,6 +313,43 @@ function sdkItem(
     return typeof item === 'string' ? item : (ctx, input) => item(sdkContext(ctx), input);
 }
 
+/**
+ * Les étapes de données des modules, dans l'ordre d'installation. Le chiffre
+ * d'un espace y lève quand sa clé ne s'ouvre pas, au lieu de rendre `null` :
+ * une étape prendrait sinon une clé absente pour une cellule illisible.
+ */
+export function moduleDataSteps(crypt: Encryption): ModuleDataSteps[] {
+    return MODULES.flatMap((mod) => {
+        const steps = mod.server.dataSteps ?? [];
+        if (steps.length === 0) return [];
+        return [
+            {
+                id: mod.manifest.id,
+                steps,
+                context: (db) => ({
+                    q: sdkQueryable(db.queryable),
+                    repo: mod.repoFor(db),
+                    cipherFor: (workspaceId) => strictOpenCipher(db, crypt, workspaceId),
+                    keys: serverKeysOf(crypt, mod.manifest.id),
+                    logger: logger.child({ feature: mod.manifest.id })
+                })
+            }
+        ];
+    });
+}
+
+/** Le chiffre ouvert d'un espace, qui vérifie d'abord que sa clé s'ouvre. */
+function strictOpenCipher(db: Database, crypt: Encryption, workspaceId: number): SdkCipher {
+    const cipher = createOpenCipher(db, crypt, workspaceId);
+    let ready: Promise<void> | null = null;
+    const opened = (): Promise<void> => (ready ??= cipher.encrypt('').then(() => undefined));
+    return {
+        encrypt: async (plain) => (await opened(), cipher.encrypt(plain)),
+        decrypt: async (blob) => (await opened(), cipher.decrypt(blob)),
+        tryDecrypt: async (blob) => (await opened(), cipher.tryDecrypt(blob))
+    };
+}
+
 /** Les répertoires de migrations des modules, dans l'ordre d'installation. */
 export function moduleMigrationDirs(): { id: string; dir: string }[] {
     return MODULES.flatMap((m) => (m.server.migrationsDir ? [{ id: m.manifest.id, dir: m.server.migrationsDir }] : []));
@@ -332,7 +371,8 @@ export function moduleItems(
           shareable(itemId: string, workspaceId: number): Promise<boolean>;
           /** `undefined` quand la fonctionnalité ne sait pas déplacer ses éléments. */
           move?: {
-              plan(itemId: string, from: number, to: number): Promise<SdkMovePlan>;
+              /** `cipher` : le chiffre ouvert de l'espace de départ, pour lire ce dont un condensé se tire. */
+              plan(itemId: string, from: number, to: number, cipher: SdkCipher): Promise<SdkMovePlan>;
               /** `q` est transactionnel : le module y écrit, l'app y fait son ménage. */
               apply(
                   q: Queryable,
@@ -372,7 +412,7 @@ export function moduleItems(
         shareable: (itemId, workspaceId) =>
             items.shareable ? items.shareable(mod.repoFor(db), itemId, workspaceId) : Promise.resolve(true),
         move: move && {
-            plan: (itemId, from, to) =>
+            plan: (itemId, from, to, cipher) =>
                 move.plan({
                     // Le pool : planifier n'écrit rien, et le geste n'a pas
                     // encore ouvert de transaction.
@@ -380,7 +420,9 @@ export function moduleItems(
                     repo: mod.repoFor(db),
                     itemId,
                     fromWorkspaceId: from,
-                    toWorkspaceId: to
+                    toWorkspaceId: to,
+                    cipher,
+                    keys: moduleRefKeys(mod.manifest.id)
                 }),
             apply: (q, itemId, from, to, ciphers) =>
                 move.apply({
@@ -391,7 +433,8 @@ export function moduleItems(
                     itemId,
                     fromWorkspaceId: from,
                     toWorkspaceId: to,
-                    ciphers
+                    ciphers,
+                    keys: moduleRefKeys(mod.manifest.id)
                 })
         },
         copy: copy && {
@@ -415,7 +458,10 @@ export function moduleItems(
                     logger
                 );
                 await copy.admit?.({ q: tx, repo, toWorkspaceId: to, rows, quota });
-                const itemId = await importItemTree(tx, copy.tree, rows, into);
+                const itemId = await importItemTree(tx, copy.tree, rows, {
+                    ...into,
+                    keys: moduleRefKeys(mod.manifest.id)
+                });
                 await copy.settle?.({ q: tx, repo, toWorkspaceId: to, itemId });
                 return itemId;
             }

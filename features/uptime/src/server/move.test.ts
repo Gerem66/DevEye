@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { FeatureError, type SdkCipher, type SdkQueryable } from '@deveye/types/sdk/server';
+import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { uptimeMove } from './move';
 import type { UptimeRepo } from './repo';
@@ -49,6 +50,7 @@ function cipherOf(tag: string): SdkCipher {
 }
 
 const ciphers = { from: cipherOf('A'), to: cipherOf('B') };
+const { keys } = createTestContext();
 
 /** Le dépôt ne sert à rien ici : tout passe par le queryable. */
 const repo = {} as UptimeRepo;
@@ -62,7 +64,7 @@ describe('uptime : changement d’espace', () => {
             'uptime_incidents.error': [{ row_id: 3, value: 'A:502' }]
         });
 
-        await uptimeMove.apply({ q, repo, itemId: '7', fromWorkspaceId: 1, toWorkspaceId: 2, ciphers });
+        await uptimeMove.apply({ q, repo, itemId: '7', fromWorkspaceId: 1, toWorkspaceId: 2, ciphers, keys });
 
         // Chaque colonne s'écrit en un paquet `CASE id WHEN ? THEN ?` : la
         // valeur rescellée suit l'identifiant.
@@ -88,7 +90,7 @@ describe('uptime : changement d’espace', () => {
         });
 
         await assert.rejects(
-            uptimeMove.apply({ q, repo, itemId: '7', fromWorkspaceId: 1, toWorkspaceId: 2, ciphers }),
+            uptimeMove.apply({ q, repo, itemId: '7', fromWorkspaceId: 1, toWorkspaceId: 2, ciphers, keys }),
             (err: unknown) => err instanceof FeatureError && /illisible/.test(err.message)
         );
         assert.equal(writes.length, 0);
@@ -110,7 +112,8 @@ describe('uptime : changement d’espace', () => {
                 itemId: '7',
                 fromWorkspaceId: 1,
                 toWorkspaceId: 2,
-                ciphers
+                ciphers,
+                keys
             }),
             (err: unknown) => err instanceof FeatureError && err.code === 'not_found'
         );
@@ -126,7 +129,9 @@ describe('uptime : changement d’espace', () => {
             repo,
             itemId: '7',
             fromWorkspaceId: 1,
-            toWorkspaceId: 2
+            toWorkspaceId: 2,
+            cipher: ciphers.from,
+            keys
         });
         // Huit cellules : contenu, dernière erreur, référence et verdict d'intégrité, jeton de
         // l'adresse d'appel, l'erreur des deux tables d'historique et le détail du journal des intégrités.

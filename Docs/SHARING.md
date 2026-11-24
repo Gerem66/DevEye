@@ -416,6 +416,13 @@ qui peut n'avoir que la lecture. Un mot de passe ou un jeton rangé dans sa prop
 colonne est omis (`omit`), celui qui partage une colonne avec d'autres données
 est expurgé (`redact`), et la copie arrive à reconnecter.
 
+**Aucun condensé ne voyage non plus.** Un condensé à clé (`keys.ref`) est lié à
+l'espace ou à l'élément où il a été calculé : l'arbre le déclare (`digests`),
+la source ne l'exporte pas, et la destination calcule le sien depuis le texte
+en clair avant de juger l'unicité. Un paquet qui en apporte un est refusé. Le
+paquet porte un numéro de format (`BUNDLE_FORMAT`) : celui d'un serveur qui
+exportait encore ses condensés n'est pas lisible ici.
+
 ### Rien de ce qui arrive n'est cru
 
 Le paquet vient d'un navigateur, donc de n'importe qui :

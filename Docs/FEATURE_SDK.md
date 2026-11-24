@@ -356,6 +356,18 @@ dormirait dans la sauvegarde qu'elle protège). Sauvegardes en dérive la clé d
 ses archives, que `scripts/restore-backup.mjs` refait sans DevEye ; Audience le
 sel de ses visiteurs ; Finances et Hébergement s'en servent aussi.
 
+**Les étapes de données.** `dataSteps` (`FeatureServer`) porte les reprises
+qu'une migration SQL ne sait pas faire parce qu'il leur faut une clé :
+recalculer un condensé, sceller une colonne qui ne l'était pas. L'hôte joue
+chaque étape une fois, au démarrage, après les migrations et avant tout
+service (`src/db/dataSteps.ts`), et la note dans `_data_steps` sous
+`<module>/<id>`. Une étape qui lève arrête le démarrage, comme une migration.
+Elle s'écrit pour pouvoir repartir du début (un démarrage coupé la rejoue) ;
+quand ce n'est pas possible, `atomic` la joue et la note dans une seule
+transaction. Son `cipherFor` lève quand la clé d'un espace ne s'ouvre pas, au
+lieu de rendre `null` : une étape ne doit pas prendre une clé absente pour une
+cellule illisible.
+
 `ref(purpose, scope, value)` rend un condensé à clé (HMAC-SHA256, 32
 caractères hexadécimaux) : de quoi retrouver une ligne par une valeur chiffrée
 sans la déchiffrer, un nom qui doit rester unique, un auteur à regrouper. Un
@@ -551,6 +563,16 @@ tenir une seule liste de cellules) et l'app lit et écrit (`exportItemTree`,
 source, `admit` et `settle` dans la transaction de destination. Uptime,
 Audience, Bases de données, Déploiements, Git, Mail, Notes, Projets, Tableau
 blanc et Stores se copient.
+
+Une colonne qui tient le condensé à clé d'une valeur chiffrée se déclare dans
+l'arbre (`digests` : la colonne, l'usage, la portée `'workspace'` ou `'item'`,
+la colonne scellée d'où la valeur se tire, et la fonction qui l'en extrait).
+Le moteur la calcule alors partout où une ligne change de place : une copie
+n'emporte aucun condensé et arrive avec les siens, `itemDigestTaken` dit à un
+`move.plan` si le nom est pris à l'arrivée, `rekeyItemDigests` les recalcule
+dans `move.apply` après `resealCells`, et `rekeyTreeDigests` reprend toute une
+table. Les handlers calculent la même valeur par `itemDigest`. Réservé à un
+arbre que le serveur lit toujours : pas avec `tier`.
 
 ### Les quotas et les pauses
 
@@ -910,8 +932,8 @@ tick })` (boucle avec garde de réentrance, `stop()` attend le tick en cours),
   `logger`.
 
 Par entrée serveur (`FeatureServer`) : `createRepo`, `features`,
-`migrationsDir`, `createService`, `items` (`homeOf`, `labelOf`, `shareable?`,
-`move?`, `copy?`), `domains`, `accountExport`, `quotas`, `env`,
+`migrationsDir`, `dataSteps`, `createService`, `items` (`homeOf`, `labelOf`,
+`shareable?`, `move?`, `copy?`), `domains`, `accountExport`, `quotas`, `env`,
 `externalServices`, `mailSamples`, `e2e`, `adminPending`, `adminFacts`.
 
 Par service créé (`FeatureService`) : `start`, `stop`, `agentHooks`,

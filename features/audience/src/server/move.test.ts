@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
 import { movableCellsOf, type SdkCipher, type SdkQueryable } from '@deveye/types/sdk/server';
+import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { audienceMove } from './move';
 import { audienceTree } from './copy';
@@ -34,6 +35,7 @@ const ciphers = {
     from: { encrypt: async (v: string) => v, tryDecrypt: async (v: string) => v } as unknown as SdkCipher,
     to: { encrypt: async (v: string) => v, tryDecrypt: async (v: string) => v } as unknown as SdkCipher
 };
+const { keys } = createTestContext();
 
 afterEach(() => setIngest(null));
 
@@ -61,7 +63,8 @@ describe('audienceMove.apply', () => {
             itemId: '7',
             fromWorkspaceId: 1,
             toWorkspaceId: 42,
-            ciphers
+            ciphers,
+            keys
         });
 
         assert.equal(updates.length, 1);

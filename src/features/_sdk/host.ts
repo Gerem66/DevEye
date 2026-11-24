@@ -52,6 +52,12 @@ export async function pushAgentConfig(deviceId: string): Promise<boolean> {
     return hub.pushConfig(deviceId, await agentConfigFor(sdkDb(), row));
 }
 
+/** Les condensés à clé d'un module, seuls : ce qu'il faut à la copie et au déplacement, qui n'ont pas la clé serveur. */
+export function moduleRefKeys(featureId: string): Pick<SdkServerKeys, 'ref'> {
+    const label = moduleSealLabel(featureId);
+    return { ref: (purpose, scope, value) => refKeys().ref(label, purpose, scope, value) };
+}
+
 /**
  * Les dérivations de la clé serveur offertes à un module : sceller/ouvrir des
  * octets sous la sous-clé du module (`module:<id>`), et l'HKDF que
@@ -62,9 +68,9 @@ export async function pushAgentConfig(deviceId: string): Promise<boolean> {
 export function serverKeysOf(crypt: Encryption, featureId: string): SdkServerKeys {
     const label = moduleSealLabel(featureId);
     return {
+        ...moduleRefKeys(featureId),
         sealBytes: (plain, context = '') => crypt.sealFor(label, Buffer.from(plain), context),
         openBytes: (sealed, context = '') => crypt.openFor(label, sealed, context),
-        derive: (salt, info, length) => new Uint8Array(crypt.derive(salt, info, length)),
-        ref: (purpose, scope, value) => refKeys().ref(label, purpose, scope, value)
+        derive: (salt, info, length) => new Uint8Array(crypt.derive(salt, info, length))
     };
 }

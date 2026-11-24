@@ -7,6 +7,7 @@ import type { FeatureManifest } from '@deveye/types/sdk';
 import {
     defineSdkFeature,
     type FeatureServer,
+    type SdkCipher,
     type FeatureServiceDeps,
     type SdkFeatureContext
 } from '@deveye/types/sdk/server';
@@ -216,7 +217,15 @@ const movable: FeatureServer<{ tag: string }> = {
         labelOf: async () => 'Élément',
         move: {
             plan: async (mctx) => {
-                moveCalls.push(['plan', mctx.repo, mctx.itemId, mctx.fromWorkspaceId, mctx.toWorkspaceId]);
+                moveCalls.push([
+                    'plan',
+                    mctx.repo,
+                    mctx.itemId,
+                    mctx.fromWorkspaceId,
+                    mctx.toWorkspaceId,
+                    mctx.cipher,
+                    typeof mctx.keys.ref
+                ]);
                 return { blockers: [], drops: ['son historique'], rows: 12 };
             },
             apply: async (mctx) => {
@@ -613,12 +622,13 @@ describe('moduleItems : le déplacement d’un élément', () => {
 
     it('passe au module son dépôt et les deux espaces, et rend son plan', async () => {
         const items = moduleItems('backup', host.db);
-        assert.deepEqual(await items?.move?.plan('7', 3, 9), {
+        const cipher = { tag: 'chiffre de départ' } as unknown as SdkCipher;
+        assert.deepEqual(await items?.move?.plan('7', 3, 9, cipher), {
             blockers: [],
             drops: ['son historique'],
             rows: 12
         });
-        assert.deepEqual(moveCalls.at(-1), ['plan', { tag: 'repo' }, '7', 3, 9]);
+        assert.deepEqual(moveCalls.at(-1), ['plan', { tag: 'repo' }, '7', 3, 9, cipher, 'function']);
     });
 
     it('écrit par la transaction qu’on lui passe, pas par le pool de son dépôt', async () => {

@@ -508,6 +508,13 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             listByName: { args: ['n'] }
         }
     },
+    dataSteps: {
+        global: "le registre des étapes de données jouées, pour l'instance",
+        methods: {
+            applied: { args: [] },
+            record: { args: ['m/001'] }
+        }
+    },
     serverRefKey: {
         global: "la racine des condensés à clé, une ligne pour l'instance",
         methods: {
