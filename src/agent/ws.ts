@@ -46,7 +46,6 @@ import {
     AGENT_TERM_EXIT,
     AGENT_TERM_OUTPUT,
     AGENT_UPDATED,
-    agentClientMessageSchema,
     type AgentClientMessage,
     type AgentServerMessage,
     AGENT_TOKEN_ROTATE,
@@ -104,6 +103,7 @@ import {
 } from './handlers';
 import { agentConfigFor } from './config';
 import { authenticateDevice, deviceTokenOf } from './deviceAuth';
+import { readAgentFrame } from './frame';
 import { agentFrame } from './orders';
 import { notifyDeviceWorkspaces, recordAgentOffline, recordAgentOnline } from './presence';
 import type { LiveHub } from '@/live/hub';
@@ -355,17 +355,12 @@ export async function registerAgentWS(
             reqLogger.info({ until }, 'Agent connected paused');
             hub.agentPaused(deviceId, socket);
             onMessage = (raw) => {
-                let parsed;
-                try {
-                    parsed = agentClientMessageSchema.safeParse(JSON.parse(raw.toString()));
-                } catch {
-                    return;
-                }
-                if (!parsed.success || parsed.data.command !== AGENT_HELLO) {
+                const frame = readAgentFrame(raw);
+                if (!frame.ok || frame.message.command !== AGENT_HELLO) {
                     reqLogger.debug('Frame of a paused agent ignored');
                     return;
                 }
-                void handleHello(session, parsed.data.payload).catch((err: unknown) => {
+                void handleHello(session, frame.message.payload).catch((err: unknown) => {
                     reqLogger.warn({ err }, 'Hello of a paused agent failed');
                 });
             };
@@ -455,10 +450,8 @@ export async function registerAgentWS(
         }
 
         const handleMessage = async (raw: Buffer): Promise<void> => {
-            let parsed;
-            try {
-                parsed = agentClientMessageSchema.safeParse(JSON.parse(raw.toString()));
-            } catch {
+            const frame = readAgentFrame(raw);
+            if (!frame.ok && frame.reason === 'json') {
                 reqLogger.warn({ bytes: raw.length }, 'Agent sent malformed JSON');
                 send(socket, deviceId, {
                     command: AGENT_ERROR,
@@ -466,14 +459,14 @@ export async function registerAgentWS(
                 });
                 return;
             }
-            if (!parsed.success) {
+            if (!frame.ok) {
                 // Journalisé, et pas seulement renvoyé à l'agent : sinon une
                 // machine dont les trames ne valident plus paraît en ligne et
                 // muette, sans indice.
                 reqLogger.warn(
                     {
-                        command: (parsed.error.flatten().fieldErrors as { command?: string[] })?.command,
-                        err: parsed.error.flatten()
+                        command: (frame.error.flatten().fieldErrors as { command?: string[] })?.command,
+                        err: frame.error.flatten()
                     },
                     'Agent frame rejected by validation'
                 );
@@ -487,9 +480,9 @@ export async function registerAgentWS(
             // promise is fire-and-forget: an unhandled rejection is fatal on
             // modern Node) nor take the socket down with it.
             try {
-                await dispatch(session, parsed.data);
+                await dispatch(session, frame.message);
             } catch (err) {
-                reqLogger.error({ err, command: parsed.data.command }, 'Agent frame handler failed');
+                reqLogger.error({ err, command: frame.message.command }, 'Agent frame handler failed');
                 send(socket, deviceId, {
                     command: AGENT_ERROR,
                     payload: { code: 'internal', message: 'Handler failed' }

@@ -1,0 +1,47 @@
+# The properties run on every push with a fixed seed, so a red CI can be
+# replayed. Once a week they run long, on a seed nobody chose: what the fixed
+# one never draws ends up drawn here.
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Seed to replay (an integer). Empty draws one.
+        required: false
+      runs:
+        description: Draws per property.
+        required: false
+        default: '5000'
+
+permissions:
+  contents: read
+
+jobs:
+  properties:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Generate the feature registry
+        run: npm run gen:features:local
+
+      # The seed is printed first: `FUZZ_SEED=<seed> FUZZ_RUNS=<runs> npm run
+      # test:properties` replays a failure locally.
+      - name: Properties, long run
+        env:
+          FUZZ_SEED: ${{ inputs.seed || 'random' }}
+          FUZZ_RUNS: ${{ inputs.runs || '5000' }}
+        run: npm run test:properties

@@ -694,6 +694,34 @@ et verrou compris ; `createTestDomainsContext`, `memoryObjectStore`,
 `testDevice`, `testDomain` complètent. Un cipher `'private'` scellé
 (`unlocked: false`) lève `locked` comme le vrai.
 
+**Propriétés.** Ce qui lit une entrée écrite par quelqu'un d'autre (un fichier
+importé, un flux réseau, le corps d'un formulaire public) s'éprouve sur des
+entrées tirées au hasard, avec `fast-check`, dans un fichier
+`*.property.test.ts` posé à côté du lecteur. Ces fichiers tournent avec les
+autres tests, cent tirages par propriété et la même graine à chaque passe
+(`scripts/property-setup.mjs`), pour qu'un échec se rejoue ; `fast-check`
+l'accompagne de l'exemple réduit qui le déclenche. `npm run test:properties`
+les lance seuls, `FUZZ_RUNS=5000` allonge la passe, `FUZZ_SEED=random` tire une
+graine et l'affiche, `FUZZ_SEED=<graine>` la rejoue. Chaque semaine,
+`.github/workflows/fuzz.yml` fait cinq mille tirages sur une graine tirée.
+
+Quatre propriétés valent pour tout lecteur :
+
+- il ne lève rien d'autre que son erreur à lui, quelle que soit l'entrée ;
+- ce qu'il rend est accepté par le contrat qui le reçoit (le schéma de la
+  commande est l'arbitre : une ligne lue que le serveur refuserait fait échouer
+  l'envoi entier) ;
+- ce qu'on écrit se relit (aller-retour), dans chaque écriture admise ;
+- son coût suit la taille de l'entrée : un plafond se vérifie par un compte, un
+  temps se mesure contre une entrée témoin de même taille, jamais contre une
+  durée fixe.
+
+Un générateur fait de bruit seul n'atteint presque jamais le cas qui compte :
+partir d'entrées bien formées, puis les abîmer. Pour un schéma zod,
+`scripts/lib/zod-arbitrary.ts` tire des valeurs qu'il accepte (les trames d'un
+agent, `src/agent/frame.property.test.ts`), et lève devant une contrainte qu'il
+ne sait pas lire au lieu de tirer à côté.
+
 L'IDE : `features/tsconfig.json` est le projet CLIENT des modules in-repo (étend
 celui du client : alias `deveye-sdk-client`, JSX) ; leur part serveur et leurs
 contrats sont inclus par le tsconfig racine, et

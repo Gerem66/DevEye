@@ -934,6 +934,16 @@ encore leurs sondes sont nommés dans
 `src/features/_sdk/register.isolation.test.ts`. Les avis de sécurité des crates de l'agent
 et des paquets npm du serveur sont relus chaque semaine.
 
+Ce qui lit une entrée écrite par quelqu'un d'autre est aussi éprouvé sur des
+entrées tirées au hasard, cent par propriété à chaque poussée, cinq mille
+chaque semaine sur une graine que personne n'a choisie : les commandes IMAP
+d'un client de messagerie, l'arbre MIME d'un message reçu, les trames d'un
+agent, un relevé bancaire importé, le corps d'un formulaire public. Les
+propriétés sont les mêmes partout : rien ne lève hors de l'erreur prévue, ce
+qui est rendu respecte le contrat qui le reçoit, et le coût reste borné par la
+taille de l'entrée. Les autres lecteurs (types publics, agent, modules privés)
+ne le sont pas encore.
+
 Ces contrôles sont écrits et tenus par le projet lui-même. Aucun tiers n'a
 encore audité DevEye ni tenté de s'y introduire : les garanties de ce document
 sont celles que le code et ses tests soutiennent, pas des garanties certifiées.

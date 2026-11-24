@@ -66,6 +66,15 @@ of the repository that do not have their probes yet are named in
 `src/features/_sdk/register.isolation.test.ts`. Dependency advisories are checked every week for
 the agent's crates and for the server's npm packages.
 
+Code that reads input written by someone else is also run against randomly
+drawn input, a hundred draws per property on every push and five thousand
+every week on a seed nobody chose: the IMAP commands of a mail client, the
+MIME tree of a received message, the frames of an agent, an imported bank
+statement, the body of a public form. The properties are the same everywhere:
+nothing throws but the expected error, what comes out satisfies the contract
+that receives it, and the cost stays bounded by the size of the input. The
+other readers (public types, agent, private modules) are not covered yet.
+
 These checks are written and maintained by the project itself. No third party
 has audited DevEye or tested it for intrusion yet: read the guarantees of the
 security model as claims the code and its tests back, not as certified ones.
