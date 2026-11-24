@@ -1,7 +1,11 @@
 import type { AppStore } from '../contracts/domain';
 
+import { createTestContext } from '@deveye/types/sdk/testing';
+
 import type { AppRow, AppStoresRepo, ListingKey, ListingRow, ReviewRow, SourceRow } from './repo';
-import { externalRef } from './_shared';
+import { listingRef } from './_shared';
+
+const { keys } = createTestContext();
 
 /**
  * Le dépôt en mémoire des tests, même contrat que le vrai. Le harnais chiffre
@@ -100,7 +104,7 @@ export function listingRow(
         workspace_id: 1,
         store,
         source_id: 10,
-        external_ref: externalRef(store, id),
+        external_ref: listingRef(keys, rest.workspace_id ?? 1, store, id),
         content: JSON.stringify({ externalId: id, storeName: null, bundleId: null, sku: sku ?? null }),
         state: null,
         history_from: null,

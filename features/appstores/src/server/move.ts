@@ -1,10 +1,11 @@
 import {
     countMovableCells,
     FeatureError,
+    itemDigestTaken,
     movableCellsOf,
+    rekeyItemDigests,
     resealCells,
-    type FeatureItemsMove,
-    type SdkQueryable
+    type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
 import { appStoresTree, DUPLICATE } from './copy';
@@ -18,26 +19,17 @@ import type { AppStoresRepo } from './repo';
  */
 const CELLS = movableCellsOf(appStoresTree);
 
-/** Une app du store déjà suivie là-bas : la base refuserait la seconde, autant le dire avant. */
-async function refsTaken(q: SdkQueryable, appId: number, toWorkspaceId: number): Promise<boolean> {
-    const rows = await q.query<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM ft_appstores_listings
-          WHERE workspace_id = ?
-            AND external_ref IN (SELECT external_ref FROM ft_appstores_listings WHERE app_id = ?)`,
-        [toWorkspaceId, appId]
-    );
-    return Number(rows[0]?.n ?? 0) > 0;
-}
-
 export const appStoresMove: FeatureItemsMove<AppStoresRepo> = {
-    async plan({ q, itemId, toWorkspaceId }) {
+    async plan({ q, itemId, toWorkspaceId, cipher, keys }) {
         const appId = Number(itemId);
+        // Une app du store déjà suivie là-bas : la base refuserait la seconde, autant le dire avant.
+        const taken = await itemDigestTaken(q, appStoresTree, appId, { cipher, keys, workspaceId: toWorkspaceId });
         const sourced = await q.query<{ n: number }>(
             'SELECT COUNT(*) AS n FROM ft_appstores_listings WHERE app_id = ? AND source_id IS NOT NULL',
             [appId]
         );
         return {
-            blockers: (await refsTaken(q, appId, toWorkspaceId)) ? [DUPLICATE] : [],
+            blockers: taken ? [DUPLICATE] : [],
             drops:
                 Number(sourced[0]?.n ?? 0) > 0
                     ? [
@@ -48,9 +40,16 @@ export const appStoresMove: FeatureItemsMove<AppStoresRepo> = {
         };
     },
 
-    async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers }) {
+    async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers, keys }) {
         const appId = Number(itemId);
         await resealCells(q, CELLS, appId, ciphers);
+        await rekeyItemDigests(
+            q,
+            appStoresTree,
+            appId,
+            { cipher: ciphers.to, keys, workspaceId: toWorkspaceId },
+            { within: 'workspace' }
+        );
         await q.execute(
             'UPDATE ft_appstores_listings SET workspace_id = ?, source_id = NULL WHERE app_id = ? AND workspace_id = ?',
             [toWorkspaceId, appId, fromWorkspaceId]

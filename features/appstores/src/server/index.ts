@@ -2,10 +2,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { APPSTORES_ITEMS_PROVIDER, type AppStoresItemsProvider } from '@deveye/types/sdk';
-import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
+import { rekeyTreeDigests, type FeatureServer, type SdkCipher } from '@deveye/types/sdk/server';
 
 import { appStoresAccountExport } from './accountExport';
-import { appStoresCopy } from './copy';
+import { appStoresCopy, appStoresTree } from './copy';
 import { appStoresE2e } from './e2e';
 import { appStoresHandlers } from './handlers';
 import { appStoresMove } from './move';
@@ -35,6 +35,22 @@ export const serverEntry: FeatureServer<AppStoresRepo> = {
     createRepo,
     features: appStoresHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    dataSteps: [
+        {
+            // Les condensés des fiches et des avis passent d'un SHA-256 nu à `keys.ref`.
+            id: '001-keyed-refs',
+            async run({ q, cipherFor, keys, logger }) {
+                const pass = await rekeyTreeDigests(q, appStoresTree, { cipherFor, keys });
+                // Une fiche illisible n'est plus reconnue : la même app peut être suivie une seconde fois dans son espace.
+                if (pass.unreadable > 0 || pass.duplicates > 0) {
+                    logger.error(
+                        { unreadable: pass.unreadable, duplicates: pass.duplicates },
+                        'Stores : des fiches ou des avis illisibles ou en double ont perdu leur condensé'
+                    );
+                }
+            }
+        }
+    ],
     quotas: { apps: { list: (repo, owned) => repo.listStockApps(owned) } },
     createService(deps) {
         const sync = new AppStoresSync(deps);

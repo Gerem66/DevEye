@@ -10,10 +10,6 @@
       "kind": "row",
       "reason": "Le déplacement a relu l'app dans l'espace de l'appelant (loadHome) avant d'en demander le plan."
     },
-    "src/server/move.ts#refsTaken": {
-      "kind": "row",
-      "reason": "Le déplacement a relu l'app dans l'espace de l'appelant (loadHome), et seuls les condensés de ses fiches sont comparés à ceux de la cible."
-    },
     "src/server/repo.ts#clearMetricsSync": {
       "kind": "service",
       "reason": "La synchronisation écrit sur une fiche qu'elle vient de relever."

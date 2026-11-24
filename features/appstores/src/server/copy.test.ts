@@ -12,7 +12,6 @@ import {
 } from '@deveye/types/sdk/server';
 
 import { appStoresCopy, appStoresTree } from './copy';
-import { externalRef } from './_shared';
 import { fakeRepo } from './_testing';
 
 /**
@@ -89,7 +88,7 @@ describe('l’arbre d’une app', () => {
                     workspace_id: 1,
                     store: 'apple',
                     source_id: 10,
-                    external_ref: externalRef('apple', '1234567890'),
+                    external_ref: 'condensé-de-l-espace-1',
                     content: '{"externalId":"1234567890"}',
                     state: '{"rating":4.5}',
                     history_from: 1,
@@ -110,6 +109,7 @@ describe('l’arbre d’une app', () => {
         assert.deepEqual(Object.keys(rows).sort(), ['ft_appstores_apps', 'ft_appstores_listings']);
         const [listing] = rows.ft_appstores_listings;
         assert.equal(listing.source_id, undefined);
+        assert.equal(listing.external_ref, undefined, 'le condensé reste dans son espace');
         assert.equal(listing.state, undefined);
         assert.equal(listing.synced_day, undefined);
         assert.ok(!JSON.stringify(rows).includes('EUR'));
@@ -129,28 +129,31 @@ describe('l’arrivée d’une copie', () => {
         execute: async () => ({ affectedRows: 0, insertId: 0 })
     });
 
-    it('compte sur l’offre de l’arrivée, et recalcule le condensé de chaque fiche', async () => {
+    it('compte sur l’offre de l’arrivée, et ne garde d’une fiche que ce qu’elle doit porter', async () => {
         const rows = bundle([
-            {
-                id: 3,
-                app_id: 1,
-                store: 'apple',
-                external_ref: 'forgé',
-                content: '{"externalId":"1234567890","sku":"s"}'
-            }
+            { id: 3, app_id: 1, store: 'apple', content: '{"externalId":"1234567890","sku":"s","intrus":"x"}' }
         ]);
         const q = quota();
         await appStoresCopy.admit?.({ q: taken(0), repo: fakeRepo(), quota: q, rows, toWorkspaceId: 2 });
         assert.deepEqual(q.asserted, [1], 'le compte des apps de l’arrivée, plus celle-ci');
-        assert.equal(rows.ft_appstores_listings[0].external_ref, externalRef('apple', '1234567890'));
+        assert.deepEqual(JSON.parse(String(rows.ft_appstores_listings[0].content)), {
+            externalId: '1234567890',
+            storeName: null,
+            bundleId: null,
+            sku: 's'
+        });
         assert.deepEqual(JSON.parse(String(rows.ft_appstores_apps[0].content)), { name: 'Météo', ratingCountry: 'FR' });
     });
 
-    it('refuse une app du store que l’arrivée suit déjà', async () => {
-        const rows = bundle([{ id: 3, app_id: 1, store: 'google', content: '{"externalId":"com.exemple.app"}' }]);
-        await assert.rejects(
-            appStoresCopy.admit!({ q: taken(1), repo: fakeRepo(), quota: quota(), rows, toWorkspaceId: 2 }),
-            (e) => e instanceof FeatureError && e.code === 'conflict'
+    it('laisse au moteur le condensé de l’arrivée et le refus d’une app déjà suivie là-bas', () => {
+        const listings = appStoresTree.find((t) => t.table === 'ft_appstores_listings');
+        assert.deepEqual(listings?.unique, {
+            column: 'external_ref',
+            message: 'Cette app est déjà suivie dans cet espace.'
+        });
+        assert.deepEqual(
+            listings?.digests?.map((d) => [d.column, d.within]),
+            [['external_ref', 'workspace']]
         );
     });
 

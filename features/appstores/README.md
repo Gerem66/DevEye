@@ -27,8 +27,11 @@ de sa sortie ; sa page invite alors à relier un store.
 L'identité d'une fiche au store (l'identifiant numérique d'Apple, le nom de
 paquet Android) ne change pas : relier une autre app du store demande de retirer
 la fiche, et son historique avec. Une même app du store ne se suit qu'une fois
-par espace : `external_ref`, un condensé de `store:identifiant`, porte une clé
-unique avec l'espace.
+par espace : `external_ref`, un condensé à clé de `store:identifiant` lié à
+l'espace (`keys.ref`), porte une clé unique avec lui. La même app suivie dans
+un autre espace y a un condensé sans rapport : une copie arrive avec celui de
+sa destination, un déplacement le recalcule. Un avis se reconnaît de même,
+parmi ceux de son app.
 
 ### 1.2 Les sources : les clés de l'utilisateur
 

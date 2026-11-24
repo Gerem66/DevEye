@@ -334,7 +334,7 @@ describe('la réponse à un avis', () => {
             id,
             app_id: store === 'apple' ? 1 : 2,
             store,
-            external_ref: reviewRef(store, externalId),
+            external_ref: reviewRef(createTestContext().keys, store === 'apple' ? 1 : 2, store, externalId),
             rating: 2,
             created_at: 1_700_000_000,
             replied_at: null,

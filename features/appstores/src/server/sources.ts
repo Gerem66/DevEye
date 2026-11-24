@@ -16,7 +16,7 @@ import { listGoogleApps, parseServiceAccount } from './stores/google';
 import { credentialsOf, openCredentials, probeStore, storeFailure, type StoreCredentials } from './stores/index';
 import {
     capabilitiesColumn,
-    externalRef,
+    listingRef,
     nowSeconds,
     readSource,
     sealJson,
@@ -269,7 +269,7 @@ export const appStoresSourceFeatures = [
                         externalId: app.externalId,
                         name: app.name,
                         bundleId: app.bundleId,
-                        known: known.has(externalRef(row.store, app.externalId))
+                        known: known.has(listingRef(ctx.keys, ctx.workspaceId, row.store, app.externalId))
                     }))
                     .sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true }))
             };

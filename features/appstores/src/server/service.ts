@@ -1205,13 +1205,13 @@ export class AppStoresSync {
     ): Promise<{ known: number; oldest: number | null }> {
         const store = work.row.store;
         const kept = reviews.filter((r) => r.createdAt >= horizon);
-        const refs = kept.map((r) => reviewRef(store, r.externalId));
+        const refs = kept.map((r) => reviewRef(this.deps.keys, work.row.app_id, store, r.externalId));
         const existing = new Map(
             (await this.deps.repo.reviewsByRefs(work.row.app_id, store, refs)).map((row) => [row.external_ref, row])
         );
         let known = 0;
         for (const review of kept) {
-            const ref = reviewRef(store, review.externalId);
+            const ref = reviewRef(this.deps.keys, work.row.app_id, store, review.externalId);
             const stored = storedReviewOf(review);
             const row = existing.get(ref);
             if (row) {

@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import {
     APP_STORES,
     appStoresAppSchema,
@@ -13,7 +11,14 @@ import {
     type AppStoresVersion
 } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import {
+    FeatureError,
+    itemDigest,
+    type ItemDigestKeys,
+    type ItemTreeDigest,
+    type SdkCipher,
+    type SdkFeatureContext
+} from '@deveye/types/sdk/server';
 
 import { DAY_SECONDS } from './days';
 import type { AppRow, AppStoresRepo, ListingRow, SourceRow } from './repo';
@@ -111,16 +116,42 @@ export async function sealJson(cipher: SdkCipher, value: unknown): Promise<strin
     return cipher.encrypt(JSON.stringify(value));
 }
 
-/**
- * L'identité d'une app au store dans un espace. Le chiffrement étant non
- * déterministe, `content` ne peut porter l'unicité : ce condensé la porte.
- */
-export function externalRef(store: AppStore, externalId: string): string {
-    return createHash('sha256').update(`${store}:${externalId}`).digest('hex').slice(0, 32);
+/** Un identifiant n'a de sens que chez son store : il se condense avec lui. */
+function storeScoped(store: unknown, externalId: unknown): string {
+    if (typeof externalId !== 'string' || externalId === '') throw new Error('Identifiant de store absent');
+    return `${String(store)}:${externalId}`;
 }
 
-/** L'identité d'un avis, par le même condensé. */
-export const reviewRef = externalRef;
+/**
+ * L'identité d'une app au store dans un espace. Le chiffrement étant non
+ * déterministe, `content` ne peut porter l'unicité : ce condensé à clé la
+ * porte. Lié à l'espace : la même app suivie ailleurs y a un condensé sans
+ * rapport, que la copie et le déplacement recalculent.
+ */
+export const LISTING_DIGEST: ItemTreeDigest = {
+    column: 'external_ref',
+    purpose: 'listing',
+    within: 'workspace',
+    from: 'content',
+    of: (plain, row) => storeScoped(row.store, (JSON.parse(plain) as Partial<StoredListing>).externalId)
+};
+
+/** L'identité d'un avis parmi ceux de son app. */
+export const REVIEW_DIGEST: ItemTreeDigest = {
+    column: 'external_ref',
+    purpose: 'review',
+    within: 'item',
+    from: 'content',
+    of: (plain, row) => storeScoped(row.store, (JSON.parse(plain) as Partial<StoredReview>).externalId)
+};
+
+export function listingRef(keys: ItemDigestKeys, workspaceId: number, store: AppStore, externalId: string): string {
+    return itemDigest(keys, LISTING_DIGEST, { workspaceId, itemId: 0 }, storeScoped(store, externalId));
+}
+
+export function reviewRef(keys: ItemDigestKeys, appId: number, store: AppStore, externalId: string): string {
+    return itemDigest(keys, REVIEW_DIGEST, { workspaceId: 0, itemId: appId }, storeScoped(store, externalId));
+}
 
 export function capabilitiesOf(column: string): AppStoresCapability[] {
     const known = new Set<string>(APPSTORES_CAPABILITIES);

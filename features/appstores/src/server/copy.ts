@@ -2,7 +2,7 @@ import { APPSTORES_APP_NAME_MAX_LENGTH, COUNTRY_CODE, isStoreAppId, type AppStor
 import { FeatureError, type FeatureItemsCopy, type ItemTree } from '@deveye/types/sdk/server';
 
 import type { AppStoresRepo } from './repo';
-import { externalRef, type StoredApp, type StoredListing } from './_shared';
+import { LISTING_DIGEST, REVIEW_DIGEST, type StoredApp, type StoredListing } from './_shared';
 
 /**
  * Ce dont une app est faite : sa ligne, ses fiches de store, et les avis que
@@ -14,6 +14,8 @@ import { externalRef, type StoredApp, type StoredListing } from './_shared';
  * ⚠️ À tenir à jour : toute colonne chiffrée qui pend à une app doit figurer
  * dans `sealed`, sinon un déplacement la laisse illisible sous l'ancienne clé.
  */
+export const DUPLICATE = 'Cette app est déjà suivie dans cet espace.';
+
 export const appStoresTree: ItemTree = [
     {
         table: 'ft_appstores_apps',
@@ -29,7 +31,9 @@ export const appStoresTree: ItemTree = [
         idColumn: 'id',
         ownerColumn: 'app_id',
         workspaceColumn: 'workspace_id',
+        unique: { column: 'external_ref', message: DUPLICATE },
         sealed: ['content', 'state'],
+        digests: [LISTING_DIGEST],
         // La source appartient à l'espace quitté ; l'état et la couverture, à ce que ce serveur a relu.
         omit: [
             'source_id',
@@ -44,10 +48,15 @@ export const appStoresTree: ItemTree = [
             'created'
         ]
     },
-    { table: 'ft_appstores_reviews', idColumn: 'id', ownerColumn: 'app_id', sealed: ['content'], cache: true }
+    {
+        table: 'ft_appstores_reviews',
+        idColumn: 'id',
+        ownerColumn: 'app_id',
+        sealed: ['content'],
+        digests: [REVIEW_DIGEST],
+        cache: true
+    }
 ];
-
-export const DUPLICATE = 'Cette app est déjà suivie dans cet espace.';
 
 const invalid = (message: string) => new FeatureError('validation', message);
 
@@ -70,8 +79,8 @@ export const appStoresCopy: FeatureItemsCopy<AppStoresRepo> = {
             ]
         };
     },
-    /** Rien de ce qui arrive n'est cru : l'identité au store se relit, et ses condensés se recalculent. */
-    async admit({ q, repo, quota, rows, toWorkspaceId }) {
+    /** Rien de ce qui arrive n'est cru : l'identité au store se relit, et le moteur en tire le condensé de l'arrivée. */
+    async admit({ repo, quota, rows }) {
         await quota.assert('apps', async (owned) => (await repo.countAppsInWorkspaces(owned)) + 1);
 
         for (const app of rows.ft_appstores_apps ?? []) {
@@ -91,7 +100,6 @@ export const appStoresCopy: FeatureItemsCopy<AppStoresRepo> = {
         }
 
         const stores = new Set<AppStore>();
-        const refs: string[] = [];
         for (const listing of rows.ft_appstores_listings ?? []) {
             const store = listing.store;
             if (store !== 'apple' && store !== 'google')
@@ -114,17 +122,7 @@ export const appStoresCopy: FeatureItemsCopy<AppStoresRepo> = {
                 bundleId: text(stored?.bundleId),
                 sku: text(stored?.sku)
             };
-            const ref = externalRef(store, externalId);
             listing.content = JSON.stringify(clean);
-            listing.external_ref = ref;
-            refs.push(ref);
-        }
-        if (refs.length > 0) {
-            const taken = await q.query<{ n: number }>(
-                'SELECT COUNT(*) AS n FROM ft_appstores_listings WHERE workspace_id = ? AND external_ref IN (?)',
-                [toWorkspaceId, refs]
-            );
-            if (Number(taken[0]?.n ?? 0) > 0) throw new FeatureError('conflict', DUPLICATE);
         }
     }
 };

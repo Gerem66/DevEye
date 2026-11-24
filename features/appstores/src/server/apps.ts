@@ -21,7 +21,7 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import type { AppRow, ListingRow } from './repo';
 import type { SyncLauncher } from './service';
 import {
-    externalRef,
+    listingRef,
     loadApp,
     loadHomeApp,
     presentApp,
@@ -87,7 +87,7 @@ async function syncTarget(ctx: Ctx, appId: number): Promise<{ row: AppRow; launc
 async function checkListing(ctx: Ctx, store: AppStore, input: AppStoresListingInput): Promise<string> {
     if (!isStoreAppId(store, input.externalId)) throw new FeatureError('validation', BAD_ID[store]);
     await checkSource(ctx, store, input.sourceId);
-    const ref = externalRef(store, input.externalId);
+    const ref = listingRef(ctx.keys, ctx.workspaceId, store, input.externalId);
     if (await ctx.repo.findListingByRef(ctx.workspaceId, ref)) throw new FeatureError('conflict', DUPLICATE);
     return ref;
 }
@@ -266,7 +266,7 @@ export const appStoresAppFeatures = [
                     await ctx.repo.deleteListing(row.id, store);
                     continue;
                 }
-                if (existing.external_ref !== externalRef(store, listing.externalId)) {
+                if (existing.external_ref !== listingRef(ctx.keys, existing.workspace_id, store, listing.externalId)) {
                     throw new FeatureError(
                         'validation',
                         `Une fiche ${STORE_LABEL[store]} garde son app : retirez-la, puis reliez l’autre app.`
