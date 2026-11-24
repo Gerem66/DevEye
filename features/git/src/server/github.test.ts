@@ -2,14 +2,12 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
 import {
-    authorRef,
     fetchDeployments,
     fetchPullRequests,
     fetchRepoInfo,
     fetchWorkflowRuns,
     GitHubError,
-    listTokenOwners,
-    nameRef
+    listTokenOwners
 } from './github';
 import { summarizeActivity } from './index';
 
@@ -31,15 +29,7 @@ afterEach(() => {
     globalThis.fetch = realFetch;
 });
 
-describe('les condensés', () => {
-    it('authorRef normalise la casse et les espaces, nameRef non', () => {
-        assert.equal(authorRef('  Gerem@Example.com '), authorRef('gerem@example.com'));
-        assert.notEqual(authorRef('gerem@example.com'), authorRef('autre@example.com'));
-        assert.equal(authorRef('x').length, 16);
-        assert.notEqual(nameRef('Main'), nameRef('main'));
-        assert.equal(nameRef('feature/x'), nameRef('feature/x'));
-    });
-});
+describe('les condensés', () => {});
 
 describe('fetchPullRequests', () => {
     it('sépare fusionnée, fermée, brouillon et ouverte sur la seule preuve fiable', async () => {

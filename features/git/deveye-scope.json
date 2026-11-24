@@ -14,10 +14,6 @@
       "kind": "row",
       "reason": "Le déplacement vient de constater que le dépôt habite l'espace de l'appelant (loadHome, par findVisibleRepo)."
     },
-    "src/server/move.ts#slugTaken": {
-      "kind": "row",
-      "reason": "Le déplacement vient de constater que le dépôt habite l'espace de l'appelant (loadHome, par findVisibleRepo)."
-    },
     "src/server/repo.ts#hasCommit": {
       "kind": "service",
       "reason": "La synchronisation lit le cache du dépôt qu'elle vient de relire dans son espace (findRepo)."

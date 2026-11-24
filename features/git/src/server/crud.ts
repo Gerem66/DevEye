@@ -25,12 +25,12 @@ import {
     reloadRepo,
     repoCipher,
     requestSync,
-    slugRef,
     syncOf,
     toRepo,
     type Ctx,
     type StoredRepo
 } from './_shared';
+import { slugRef } from './refs';
 
 /** Qui demande la synchronisation, et depuis quel espace : sa zone des opérations la suit. */
 const launcherOf = (ctx: Ctx): { userId: number; workspaceId: number } => ({
@@ -124,7 +124,7 @@ export const gitCrudFeatures = [
 
             const owner = input.owner.trim();
             const repo = input.repo.trim();
-            const ref = slugRef(owner, repo);
+            const ref = slugRef(ctx.keys, ctx.workspaceId, owner, repo);
 
             // Idempotence : le même dépôt déjà présent rend sa ligne avec le jeton
             // mis à jour, jamais un doublon. Un projet peut donc « créer » un dépôt
@@ -202,7 +202,7 @@ export const gitCrudFeatures = [
                         archived: r.archived,
                         description: r.description,
                         pushedAt: r.pushedAt,
-                        known: knownSlugs.has(slugRef(owner, r.name))
+                        known: knownSlugs.has(slugRef(ctx.keys, ctx.workspaceId, owner, r.name))
                     }))
                     // Les deux tris se complètent : `sort=pushed` côté fournisseur
                     // décide quels dépôts on reçoit au-delà de cent, celui-ci

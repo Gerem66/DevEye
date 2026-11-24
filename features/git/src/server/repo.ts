@@ -133,7 +133,6 @@ export interface GitRepo {
         workspaceId: number;
         number: number;
         state: string;
-        authorRef: string | null;
         createdAt: number;
         updatedAt: number;
         mergedAt: number | null;
@@ -604,7 +603,6 @@ export function createRepo(q: SdkQueryable): GitRepo {
             workspaceId,
             number,
             state,
-            authorRef,
             createdAt,
             updatedAt,
             mergedAt,
@@ -613,16 +611,15 @@ export function createRepo(q: SdkQueryable): GitRepo {
         }) {
             await q.execute(
                 `INSERT INTO git_pull_requests
-                     (repo_id, workspace_id, number, state, author_ref, created_at, updated_at, merged_at, closed_at, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     (repo_id, workspace_id, number, state, created_at, updated_at, merged_at, closed_at, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                      state = VALUES(state),
-                     author_ref = VALUES(author_ref),
                      updated_at = VALUES(updated_at),
                      merged_at = VALUES(merged_at),
                      closed_at = VALUES(closed_at),
                      content = VALUES(content)`,
-                [repoId, workspaceId, number, state, authorRef, createdAt, updatedAt, mergedAt, closedAt, content]
+                [repoId, workspaceId, number, state, createdAt, updatedAt, mergedAt, closedAt, content]
             );
         },
         async listPullRequests(repoId, workspaceId) {

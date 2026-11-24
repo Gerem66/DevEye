@@ -9,7 +9,6 @@ import {
 } from '@deveye/types/sdk/server';
 
 import {
-    authorRef,
     fetchBranches,
     fetchCommits,
     fetchComparison,
@@ -17,11 +16,11 @@ import {
     fetchReleases,
     fetchRepoInfo,
     GitHubError,
-    nameRef,
     type GitHubCommit,
     type GitHubSyncState
 } from './github';
 import type { GitRepo } from './repo';
+import { authorRef, branchRef, tagRef } from './refs';
 import { readJson } from './_shared';
 
 /**
@@ -381,7 +380,7 @@ export class GitSync {
             if (branches.data) {
                 const keep: string[] = [];
                 for (const branch of branches.data) {
-                    const ref = nameRef(branch.name);
+                    const ref = branchRef(this.deps.keys, repoId, branch.name);
                     keep.push(ref);
                     await this.deps.repo.upsertBranch({
                         repoId,
@@ -472,7 +471,7 @@ export class GitSync {
                     await this.deps.repo.upsertRelease({
                         repoId,
                         workspaceId,
-                        tagRef: nameRef(release.tag),
+                        tagRef: tagRef(this.deps.keys, repoId, release.tag),
                         publishedAt: release.publishedAt,
                         isPrerelease: release.isPrerelease,
                         content: await cipher.encrypt(
@@ -500,9 +499,6 @@ export class GitSync {
                         workspaceId,
                         number: pull.number,
                         state: pull.state,
-                        // Le login est un identifiant public : on ne le garde
-                        // en clair pas plus que l'adresse d'un auteur de commit.
-                        authorRef: pull.authorLogin ? nameRef(pull.authorLogin) : null,
                         createdAt: pull.createdAt,
                         updatedAt: pull.updatedAt,
                         mergedAt: pull.mergedAt,
@@ -589,7 +585,7 @@ export class GitSync {
         commits: readonly GitHubCommit[]
     ): Promise<boolean> {
         for (const commit of commits) {
-            const ref = authorRef(commit.authorEmail);
+            const ref = authorRef(this.deps.keys, repoId, commit.authorEmail);
             await this.deps.repo.upsertAuthor({
                 repoId,
                 workspaceId,

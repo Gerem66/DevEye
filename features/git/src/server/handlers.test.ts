@@ -29,7 +29,8 @@ import { createTestContext } from '@deveye/types/sdk/testing';
 import { gitHandlers } from './handlers';
 import type { GitRepo } from './repo';
 import type { GitSync } from './service';
-import { setSync, slugRef } from './_shared';
+import { slugRef } from './refs';
+import { setSync } from './_shared';
 
 /**
  * Ce qui se vérifie ici ne lève nulle part ailleurs : les restrictions par
@@ -70,7 +71,7 @@ function repo(over: Partial<GitRepoRow> & { id: number; workspace_id: number }):
     return {
         credential_id: 10,
         provider: 'github',
-        slug_ref: slugRef(owner, name),
+        slug_ref: slugRef(createTestContext().keys, over.workspace_id, owner, name),
         enabled: 1,
         default_branch: 'main',
         last_sync_at: null,
@@ -419,7 +420,7 @@ describe('git.repoAdd', () => {
         // Le harnais chiffre à l'identité : le couple est dans le blob, l'unicité
         // dans le condensé.
         assert.equal(store.repos[0].content, JSON.stringify({ owner: 'Gerem66', repo: 'DevEye' }));
-        assert.equal(store.repos[0].slug_ref, slugRef('gerem66', 'deveye'));
+        assert.equal(store.repos[0].slug_ref, slugRef(ctx.keys, ctx.workspaceId, 'gerem66', 'deveye'));
         assert.deepEqual(
             ctx.recorded.audits.map((a) => a.action),
             ['git.repoAdd']

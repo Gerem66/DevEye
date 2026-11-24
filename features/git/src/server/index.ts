@@ -1,16 +1,19 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
     GIT_ITEMS_PROVIDER,
     type DeployActivity,
     type GitItemsProvider,
     type GitRepoDescription
 } from '@deveye/types/sdk';
-import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
+import { rekeyTreeDigests, type FeatureServer, type SdkCipher } from '@deveye/types/sdk/server';
 
 import type { GitRepoRow } from '../contracts/domain';
 import { gitAccountExport } from './accountExport';
 import { fetchDeployments, fetchWorkflowRuns, GitHubError, type GitHubDeployEvent } from './github';
 import { gitHandlers } from './handlers';
-import { gitCopy } from './copy';
+import { gitCopy, gitTree } from './copy';
 import { gitMove } from './move';
 import { readRepoFiles } from './readFiles';
 import { createRepo, type GitRepo } from './repo';
@@ -95,12 +98,29 @@ function readFailure(e: unknown, label: string, what: string, right: string): st
  * aux autres features (un dépôt existe-t-il ici, comment s'appelle-t-il, et
  * pour un service sans session, d'où le cloner et avec quel jeton).
  *
- * Pas de `migrationsDir` : les tables du module datent du socle (allowlist dans
- * `deveye-feature.json`) ; une nouvelle table inaugurera `src/server/migrations/`
- * avec le préfixe `ft_git_`.
+ * Les tables du module datent du socle (allowlist dans `deveye-feature.json`) :
+ * ses migrations ne font que les modifier, et une nouvelle table prendra le
+ * préfixe `ft_git_`.
  */
 export const serverEntry: FeatureServer<GitRepo> = {
     createRepo,
+    migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    dataSteps: [
+        {
+            // Les condensés passent d'un SHA-256 nu à `keys.ref`, liés à l'espace ou au dépôt.
+            id: '001-keyed-refs',
+            async run({ q, cipherFor, keys, logger }) {
+                const pass = await rekeyTreeDigests(q, gitTree, { cipherFor, keys });
+                // Une ligne illisible ne se rattache plus à rien : un commit sans auteur, une branche sans nom.
+                if (pass.unreadable > 0) {
+                    logger.error(
+                        { unreadable: pass.unreadable },
+                        'Git : des lignes illisibles ont perdu leur condensé'
+                    );
+                }
+            }
+        }
+    ],
     features: gitHandlers,
     createService(deps) {
         const sync = new GitSync(deps);

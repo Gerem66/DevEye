@@ -803,8 +803,9 @@ afficher un écran.
 - **`message_count` et le point d'eau haute de lecture** : le badge « des
   messages non lus ici » sans ouvrir un seul message.
 - **`committed_at` et `author_ref`** : le graphe des commits est une agrégation
-  SQL. `author_ref` est un condensé de l'adresse e-mail (16 caractères de son
-  sha256) : identité stable et graine de couleur, **sans adresse en clair**.
+  SQL. `author_ref` est un condensé à clé de l'adresse e-mail, lié au dépôt :
+  identité stable et graine de couleur, **sans adresse en clair**, et sans
+  rapport avec le condensé de la même adresse dans un autre dépôt.
 - **Les dates, `archived_at`, `counts_as_done`** : la frise, les retards et
   l'avancement, tous calculés sans clé.
 
@@ -814,8 +815,9 @@ de commit passent tous par le chiffre.
 
 > **Corollaire à ne pas oublier** : le chiffrement est non déterministe, donc ce
 > qui doit être **unique** ne peut pas être chiffré. D'où les colonnes `*_ref`
-> (`author_ref`, `name_ref`, `tag_ref`), des condensés stables qui portent
-> l'unicité pendant que la valeur lisible vit dans le payload chiffré.
+> (`author_ref`, `name_ref`, `tag_ref`), des condensés à clé qui portent
+> l'unicité pendant que la valeur lisible vit dans le payload chiffré (voir
+> « Les condensés »).
 
 Les secrets d'accès (`ft_git_credentials.secret_enc` pour un jeton GitHub,
 `ft_deploy_credentials.secret_enc` pour une clé Dokploy : chaque module possède
@@ -913,10 +915,11 @@ s'il ne sait pas l'ouvrir, plutôt que d'en tirer une autre.
 
 Aujourd'hui, elle porte le condensé de l'identifiant saisi lors d'une connexion
 ratée sur un compte inconnu (`usernameRef` au journal d'audit, où l'on tape
-parfois son mot de passe par erreur) et le nom d'une base de données
-(`database_connections.name_ref`, lié à l'espace). Les condensés de Git,
-d'Audience, des Liens courts, des Stores et du module Audit sont encore des
-SHA-256 nus.
+parfois son mot de passe par erreur), le nom d'une base de données
+(`database_connections.name_ref`, lié à l'espace) et ceux de Git : le dépôt
+(`slug_ref`, lié à l'espace), ses branches, ses tags et ses auteurs (liés au
+dépôt). Les condensés d'Audience, des Liens courts, des Stores et du module
+Audit sont encore des SHA-256 nus.
 
 Un condensé lié à un espace ne le quitte pas : une copie arrive avec ceux de
 sa destination, un déplacement les recalcule. Les lignes écrites sous l'ancien

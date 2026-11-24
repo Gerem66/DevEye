@@ -1,5 +1,6 @@
-import type { FeatureItemsCopy, ItemTree } from '@deveye/types/sdk/server';
+import type { FeatureItemsCopy, ItemTree, ItemTreeDigest } from '@deveye/types/sdk/server';
 
+import { AUTHOR_DIGEST, BRANCH_DIGEST, COMMIT_AUTHOR_DIGEST, SLUG_DIGEST, TAG_DIGEST } from './refs';
 import type { GitRepo } from './repo';
 
 /**
@@ -12,12 +13,13 @@ import type { GitRepo } from './repo';
  * elle devient illisible. Rien ne peut le détecter, un blob chiffré est
  * indistinguable d'un autre.
  */
-const cache = (table: string) => ({
+const cache = (table: string, digests: readonly ItemTreeDigest[] = []) => ({
     table,
     idColumn: 'id',
     ownerColumn: 'repo_id',
     sealed: ['content'],
-    cache: true
+    cache: true,
+    digests
 });
 
 export const gitTree: ItemTree = [
@@ -27,18 +29,20 @@ export const gitTree: ItemTree = [
         ownerColumn: 'id',
         workspaceColumn: 'workspace_id',
         orderColumn: 'sort_order',
-        // `owner/repo` est unique par espace, par un condensé dérivé de lui seul.
+        // `owner/repo` est unique par espace, par un condensé lié à cet espace :
+        // il ne voyage pas, la destination calcule le sien.
         unique: { column: 'slug_ref', message: 'Ce dépôt est déjà suivi dans cet espace.' },
+        digests: [SLUG_DIGEST],
         sealed: ['content', 'last_sync_error', 'sync_state'],
         // Le jeton est une source de l'espace quitté ; l'état de
         // synchronisation appartient à ce serveur.
         omit: ['credential_id', 'last_sync_at', 'last_sync_error', 'sync_state', 'created']
     },
-    cache('git_commits'),
-    cache('git_branches'),
-    cache('git_releases'),
+    cache('git_commits', [COMMIT_AUTHOR_DIGEST]),
+    cache('git_branches', [BRANCH_DIGEST]),
+    cache('git_releases', [TAG_DIGEST]),
     cache('git_pull_requests'),
-    cache('git_commit_authors')
+    cache('git_commit_authors', [AUTHOR_DIGEST])
 ];
 
 export const gitCopy: FeatureItemsCopy<GitRepo> = {

@@ -20,7 +20,6 @@ import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import {
     GitHubError,
-    nameRef,
     type CommitPage,
     type GitHubBranch,
     type GitHubCommit,
@@ -28,9 +27,13 @@ import {
     type GitHubRelease,
     type GitHubSyncState
 } from './github';
+import { branchRef, tagRef } from './refs';
 import { serverEntry } from './index';
 import type { GitRepo } from './repo';
 import { GitSync } from './service';
+
+/** Les clés du harnais : les mêmes d'un jeu de dépendances à l'autre. */
+const KEYS = createTestServiceDeps().keys;
 
 /**
  * La synchronisation de fond, sans réseau : l'adaptateur GitHub est injecté et
@@ -220,7 +223,6 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
             if (p) {
                 Object.assign(p, {
                     state: input.state,
-                    author_ref: input.authorRef,
                     updated_at: input.updatedAt,
                     merged_at: input.mergedAt,
                     closed_at: input.closedAt,
@@ -234,7 +236,6 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
                 workspace_id: input.workspaceId,
                 number: input.number,
                 state: input.state,
-                author_ref: input.authorRef,
                 created_at: input.createdAt,
                 updated_at: input.updatedAt,
                 merged_at: input.mergedAt,
@@ -479,14 +480,14 @@ describe('un premier tour', () => {
         assert.deepEqual(
             store.releases.map((r) => [r.tag_ref, r.is_prerelease]),
             [
-                [nameRef('v2.0.0-rc.1'), 1],
-                [nameRef('v1.0.0'), 0]
+                [tagRef(KEYS, 1, 'v2.0.0-rc.1'), 1],
+                [tagRef(KEYS, 1, 'v1.0.0'), 0]
             ]
         );
         assert.deepEqual(versions, [['git', 1, 1, 'v1.0.0']]);
         assert.deepEqual(
-            store.pulls.map((p) => [p.number, p.state, p.author_ref]),
-            [[3, 'merged', nameRef('gerem66')]]
+            store.pulls.map((p) => [p.number, p.state]),
+            [[3, 'merged']]
         );
 
         // Le tour est inscrit : l'historique est complet (le distant s'est
@@ -709,7 +710,7 @@ describe('les tours suivants', () => {
             id: 1,
             repo_id: 1,
             workspace_id: 1,
-            name_ref: nameRef('main'),
+            name_ref: branchRef(KEYS, 1, 'main'),
             head_sha: 'sha-m',
             ahead_count: null,
             behind_count: null,

@@ -1,10 +1,11 @@
 import {
     countMovableCells,
     FeatureError,
+    itemDigestTaken,
     movableCellsOf,
+    rekeyItemDigests,
     resealCells,
-    type FeatureItemsMove,
-    type SdkQueryable
+    type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
 import type { GitRepo } from './repo';
@@ -23,26 +24,13 @@ const CELLS = movableCellsOf(gitTree);
 /** Les tables du cache qui portent leur propre espace, et doivent suivre. */
 const OWNED_TABLES = ['git_commits', 'git_branches', 'git_releases', 'git_pull_requests', 'git_commit_authors'];
 
-/**
- * `owner/repo` est unique par espace (`uniq_git_repo`), porté par un condensé
- * puisque le chiffrement est non déterministe : la collision se décide sans rien
- * déchiffrer, et avant d'écrire.
- */
-async function slugTaken(q: SdkQueryable, repoId: number, toWorkspaceId: number): Promise<boolean> {
-    const rows = await q.query<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM git_repos
-          WHERE workspace_id = ? AND slug_ref = (SELECT slug_ref FROM git_repos WHERE id = ?)`,
-        [toWorkspaceId, repoId]
-    );
-    return Number(rows[0]?.n ?? 0) > 0;
-}
-
 export const gitMove: FeatureItemsMove<GitRepo> = {
-    async plan({ q, itemId, toWorkspaceId }) {
+    async plan({ q, itemId, toWorkspaceId, cipher, keys }) {
         const repoId = Number(itemId);
-        const blockers = (await slugTaken(q, repoId, toWorkspaceId))
-            ? ['Ce dépôt est déjà suivi dans cet espace.']
-            : [];
+        // `owner/repo` est unique par espace (`uniq_git_repo`), par un condensé lié
+        // à l'espace : celui de l'arrivée se calcule avant d'écrire quoi que ce soit.
+        const taken = await itemDigestTaken(q, gitTree, repoId, { cipher, keys, workspaceId: toWorkspaceId });
+        const blockers = taken ? ['Ce dépôt est déjà suivi dans cet espace.'] : [];
         const rows = await q.query<{ credential_id: number | null }>(
             'SELECT credential_id FROM git_repos WHERE id = ?',
             [repoId]
@@ -59,9 +47,17 @@ export const gitMove: FeatureItemsMove<GitRepo> = {
         };
     },
 
-    async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers }) {
+    async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers, keys }) {
         const repoId = Number(itemId);
         await resealCells(q, CELLS, repoId, ciphers);
+        // Seul le condensé du dépôt dépend de l'espace : ceux du cache, liés au dépôt, le suivent tels quels.
+        await rekeyItemDigests(
+            q,
+            gitTree,
+            repoId,
+            { cipher: ciphers.to, keys, workspaceId: toWorkspaceId },
+            { within: 'workspace' }
+        );
         // Chaque table du cache porte son propre `workspace_id` : sans elles,
         // le dépôt arriverait vide et son historique resterait derrière.
         for (const table of OWNED_TABLES) {

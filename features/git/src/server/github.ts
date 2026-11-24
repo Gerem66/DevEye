@@ -1,5 +1,3 @@
-import { createHash } from 'crypto';
-
 /**
  * Adaptateur GitHub, en lecture seule : `fetch` global, pas de client HTTP maison,
  * et une surface étroite qui rend le fournisseur remplaçable.
@@ -124,20 +122,6 @@ interface FetchResult<T> {
     /** `null` = 304, rien n'a changé depuis l'ETag fourni. */
     data: T | null;
     etag: string | null;
-}
-
-/**
- * Identité stable d'un auteur, sans conserver son adresse en clair : le condensé
- * sert de clé d'unicité et de graine de couleur, l'adresse lisible vit dans le
- * payload chiffré.
- */
-export function authorRef(email: string): string {
-    return createHash('sha256').update(email.trim().toLowerCase()).digest('hex').slice(0, 16);
-}
-
-/** Condensé stable d'un nom (branche, tag) : porte l'unicité que le chiffré ne peut pas porter. */
-export function nameRef(name: string): string {
-    return createHash('sha256').update(name).digest('hex').slice(0, 16);
 }
 
 /** Sans jeton, l'appel passe en anonyme : 60 requêtes par heure et par IP, le public seulement. */

@@ -43,10 +43,20 @@ que le palier est censé cacher.
 
 Le chiffrement est non déterministe : deux chiffrés du même `owner/repo`
 diffèrent, et aucune contrainte d'unicité ne tiendrait dessus. D'où
-`git_repos.slug_ref`, les 16 premiers caractères hexadécimaux du sha256 de
-`owner/repo` en minuscules, sous `UNIQUE (workspace_id, slug_ref)`. Même motif
-pour `name_ref` (branche), `tag_ref` (release) et `author_ref` (auteur, condensé
-de l'adresse : l'adresse lisible vit dans le corps chiffré).
+`git_repos.slug_ref`, un condensé à clé (`keys.ref`, 32 caractères) de
+`owner/repo` en minuscules, lié à l'espace, sous
+`UNIQUE (workspace_id, slug_ref)`. Même motif, lié au dépôt cette fois, pour
+`name_ref` (branche), `tag_ref` (release) et `author_ref` (auteur, condensé de
+l'adresse : l'adresse lisible vit dans le corps chiffré). Un commit et la ligne
+de son auteur portent le même `author_ref` : c'est par lui qu'ils se
+retrouvent, et qu'un auteur se rattache à un membre.
+
+Toutes les déclarations sont dans `refs.ts`. Un condensé nu se recalculerait
+en devinant la valeur (une adresse, un nom de dépôt) ; celui-ci demande une clé
+que seul le serveur détient, et la même adresse donne un condensé sans rapport
+dans un autre dépôt. Lié à l'espace, `slug_ref` ne voyage pas : une copie
+arrive avec celui de sa destination, un déplacement le recalcule. L'étape de
+données `001-keyed-refs` a repris les lignes d'avant.
 
 Ce condensé rend **`git.repoAdd` idempotente** : un dépôt déjà présent rend sa
 ligne, jeton mis à jour, au lieu d'un doublon. Un projet peut « créer » un dépôt
@@ -424,15 +434,17 @@ porte `move` et `copy` :
 
 - `copy.ts` décrit l'arbre d'un dépôt (`gitTree`) : la ligne de `git_repos`
   (cellules scellées `content`, `last_sync_error`, `sync_state` ; unicité sur
-  `slug_ref`) et les cinq tables du cache, marquées `cache`. Le jeton, le
+  `slug_ref`) et les cinq tables du cache, marquées `cache`, chacune avec ses
+  condensés (`digests`). Le jeton, le
   dernier état et l'état de synchronisation ne suivent pas (`omit`) : le jeton
   est une source de l'espace quitté, et une copie va relire son historique.
   `admit` contrôle le quota `repos` dans l'espace d'arrivée.
 - `move.ts` rescelle les cellules de l'arbre sous la clé de l'espace d'arrivée,
   fait suivre le `workspace_id` des tables du cache, met `credential_id` à NULL
   (le dépôt arrive sans jeton, donc sans synchronisation, état que la feature
-  sait dire), range le dépôt en fin de liste, et refuse si `slug_ref` est déjà
-  pris là-bas.
+  sait dire), range le dépôt en fin de liste, et refuse si le dépôt est déjà
+  suivi là-bas (le condensé de l'arrivée se calcule depuis `owner/repo`). Les
+  condensés du cache, liés au dépôt, suivent tels quels.
 - Les listes déduisent `ctx.items.restrictions()` : un dépôt qu'une restriction
   masque pour ce rôle disparaît plutôt que de figurer grisé, et la tuile compte
   ce que la liste montre. `git.repoRemove` appelle `ctx.items.forget` : sans ce

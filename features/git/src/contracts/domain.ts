@@ -295,7 +295,6 @@ export interface GitPullRequestRow {
     workspace_id: number;
     number: number;
     state: string;
-    author_ref: string | null;
     created_at: number;
     updated_at: number;
     merged_at: number | null;

@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import type { GitCredential, GitCredentialRow, GitRepo as GitRepoDto, GitRepoRow } from '../contracts/domain';
 import { gitRepoSchema } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
@@ -37,18 +36,6 @@ export function fromGitHub<T>(call: Promise<T>): Promise<T> {
 export interface StoredRepo {
     owner: string;
     repo: string;
-}
-
-/**
- * L'identité d'un dépôt dans l'espace. Le chiffrement étant non déterministe,
- * `content` ne peut porter aucune contrainte d'unicité ; ce condensé la porte à
- * sa place. Insensible à la casse, parce que GitHub l'est.
- */
-export function slugRef(owner: string, repo: string): string {
-    return createHash('sha256')
-        .update(`${owner.trim().toLowerCase()}/${repo.trim().toLowerCase()}`)
-        .digest('hex')
-        .slice(0, 16);
 }
 
 /** Déchiffre et parse, sans jamais lever : `null` dit simplement « illisible ». */
