@@ -2,7 +2,7 @@ import { databaseInspect, databaseQuery, databaseTestDraft } from '../contracts/
 import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayOf } from '@deveye/types/sdk/server';
 
 import { explainError, openSession, type Session } from './engine';
-import { assertSecretsStay, loadDatabase, monitorOf, reloadDatabase, type Ctx } from './_shared';
+import { assertSecretsStay, loadDatabase, monitorOf, reloadDatabase, secretsCipherFor, type Ctx } from './_shared';
 
 /**
  * Ce qui joint réellement un serveur. Sous le droit d'écriture : lire une base,
@@ -13,9 +13,11 @@ import { assertSecretsStay, loadDatabase, monitorOf, reloadDatabase, type Ctx } 
 async function sessionFor(ctx: Ctx, databaseId: number): Promise<Session> {
     const row = await loadDatabase(ctx, databaseId);
     await ctx.quota.assertActive('connections', String(databaseId));
+    // Avant tout le reste : une base protégée, session verrouillée, répond `locked`.
+    const secrets = await secretsCipherFor(ctx, row);
     const monitor = monitorOf();
     try {
-        return await openSession(await monitor.targetOf(row, row.workspace_id));
+        return await openSession(await monitor.targetOf(row, row.workspace_id, secrets));
     } catch (e) {
         // Un serveur injoignable est une réponse attendue, pas un `internal`.
         throw new FeatureError('conflict', explainError(e));
@@ -56,6 +58,7 @@ export const databaseProbeFeatures = [
             // la même base seulement, au même endroit. Sinon il se ressaisit.
             if (input.databaseId !== undefined && (input.password === undefined || input.access.secret === undefined)) {
                 const row = await loadDatabase(ctx, input.databaseId);
+                const secrets = await secretsCipherFor(ctx, row);
                 await assertSecretsStay(
                     cipher,
                     row,
@@ -72,10 +75,10 @@ export const databaseProbeFeatures = [
                     { password: input.password === undefined, accessSecret: input.access.secret === undefined }
                 );
                 if (input.password === undefined) {
-                    password = row.secret_enc ? await cipher.tryDecrypt(row.secret_enc) : null;
+                    password = row.secret_enc ? await secrets.tryDecrypt(row.secret_enc) : null;
                 }
                 if (input.access.secret === undefined) {
-                    accessSecret = row.access_secret_enc ? await cipher.tryDecrypt(row.access_secret_enc) : null;
+                    accessSecret = row.access_secret_enc ? await secrets.tryDecrypt(row.access_secret_enc) : null;
                 }
             }
 
@@ -124,8 +127,9 @@ export const databaseProbeFeatures = [
         handler: async (ctx: Ctx, input) => {
             const row = await loadDatabase(ctx, input.databaseId);
             await ctx.quota.assertActive('connections', String(input.databaseId));
+            const secrets = await secretsCipherFor(ctx, row);
             // Le relevé lit la base chez elle et diffuse à son espace.
-            const probe = await monitorOf().checkNow(input.databaseId, row.workspace_id);
+            const probe = await monitorOf().checkNow(input.databaseId, row.workspace_id, secrets);
             return { database: await reloadDatabase(ctx, input.databaseId), probe };
         }
     }),

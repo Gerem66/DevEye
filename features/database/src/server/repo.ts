@@ -1,4 +1,4 @@
-import type { DatabaseAlertRow, DatabaseRow } from '../contracts/domain';
+import type { DatabaseAlertRow, DatabaseRow, DatabaseSecurityTier } from '../contracts/domain';
 import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /** Une base et ses compteurs d'alertes ; le compte de projets vient du contrat de Projets. */
@@ -40,9 +40,20 @@ export interface DatabaseRepo {
         secretEnc: string | null;
         accessContent: string | null;
         accessSecretEnc: string | null;
+        securityTier: DatabaseSecurityTier;
         monitorEnabled: boolean;
         intervalSeconds: number;
     }): Promise<DatabaseRow>;
+    /**
+     * Passe les deux secrets d'une base sous l'autre étage, déjà rechiffrés.
+     * Vers `guarded`, son relevé s'arrête et ses alertes s'éteignent : le
+     * serveur ne peut plus la joindre seul. Faux si la base n'est plus là.
+     */
+    setTier(
+        id: number,
+        workspaceId: number,
+        input: { securityTier: DatabaseSecurityTier; secretEnc: string | null; accessSecretEnc: string | null }
+    ): Promise<boolean>;
     update(
         id: number,
         workspaceId: number,
@@ -244,12 +255,13 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
             );
             const res = await q.execute(
                 `INSERT INTO database_connections
-                     (workspace_id, engine, name_ref, sort_order, monitor_enabled, interval_seconds,
+                     (workspace_id, engine, security_tier, name_ref, sort_order, monitor_enabled, interval_seconds,
                       content, secret_enc, access_content, access_secret_enc)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     input.workspaceId,
                     input.engine,
+                    input.securityTier,
                     input.nameRef,
                     Number(posRows[0]?.next ?? 0),
                     input.monitorEnabled ? 1 : 0,
@@ -295,6 +307,26 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
             if (res.affectedRows === 0) return null;
             return find(id, workspaceId);
         },
+        async setTier(id, workspaceId, input) {
+            const res = await q.execute(
+                input.securityTier === 'guarded'
+                    ? `UPDATE database_connections
+                          SET security_tier = 'guarded', secret_enc = ?, access_secret_enc = ?, monitor_enabled = 0
+                        WHERE id = ? AND workspace_id = ?`
+                    : `UPDATE database_connections
+                          SET security_tier = 'open', secret_enc = ?, access_secret_enc = ?
+                        WHERE id = ? AND workspace_id = ?`,
+                [input.secretEnc, input.accessSecretEnc, id, workspaceId]
+            );
+            if (res.affectedRows === 0) return false;
+            if (input.securityTier === 'guarded') {
+                await q.execute(
+                    'UPDATE database_alerts SET enabled = 0, firing = 0 WHERE database_id = ? AND workspace_id = ?',
+                    [id, workspaceId]
+                );
+            }
+            return true;
+        },
         async remove(id, workspaceId) {
             // Alertes et liaisons partent en CASCADE.
             const res = await q.execute('DELETE FROM database_connections WHERE id = ? AND workspace_id = ?', [
@@ -332,11 +364,14 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
         },
         async listDue(now, limit, pausedIds) {
             // Jamais relevée d'abord (NULL trie en tête), puis la plus en retard.
+            // Une base protégée n'est jamais due : ses secrets ne s'ouvrent qu'en
+            // présence de son propriétaire.
             // `NOT IN ()` n'est pas du SQL : la clause n'existe qu'avec des pauses.
             const paused = pausedIds.length > 0;
             return q.query<DatabaseRow>(
                 `SELECT * FROM database_connections
                   WHERE monitor_enabled = 1
+                    AND security_tier = 'open'
                     AND (last_check_at IS NULL OR last_check_at + interval_seconds <= ?)
                     ${paused ? 'AND id NOT IN (?)' : ''}
                   ORDER BY last_check_at IS NOT NULL, last_check_at ASC

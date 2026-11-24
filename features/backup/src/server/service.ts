@@ -554,9 +554,10 @@ export class BackupEngine {
             // savoir déchiffrer une connexion.
             const databases = this.deps.providers.get<DatabaseBackupProvider>(DATABASE_BACKUP_PROVIDER);
             if (!databases) throw new Error('Source Bases de données indisponible.');
-            if (!(await databases.findDatabase(job.source_id, job.workspace_id))) {
-                throw new Error('La base de ce travail a été supprimée.');
-            }
+            const candidate = await databases.findDatabase(job.source_id, job.workspace_id);
+            if (!candidate) throw new Error('La base de ce travail a été supprimée.');
+            // Devenue hors de portée depuis que le travail la vise : le run le dit.
+            if (candidate.unavailable) throw new Error(candidate.unavailable);
             const may = await databases.authorize(job.source_id, job.workspace_id, author);
             if (!may.ok) {
                 throw new Error(

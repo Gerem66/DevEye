@@ -34,6 +34,6 @@ export const manifest = {
      * ses alertes s'écrivent sur sa fiche. Notifications, Partage et
      * Permissions viennent du descripteur.
      */
-    settings: { item: ['general'] },
+    settings: { item: ['general', 'encryption'] },
     commands: databaseCommands
 } satisfies FeatureManifest;

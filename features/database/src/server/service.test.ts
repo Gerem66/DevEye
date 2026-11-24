@@ -12,6 +12,7 @@ import {
     type DatabaseItemsProvider,
     type DatabaseMeasureProvider
 } from '@deveye/types/sdk';
+import type { SdkCipher } from '@deveye/types/sdk/server';
 import { createTestServiceDeps, testDevice } from '@deveye/types/sdk/testing';
 
 // L'accès d'une sauvegarde ouvre un vrai relais : le test lui donne une base
@@ -41,6 +42,7 @@ function row(over: Partial<DatabaseRow> = {}): DatabaseRow {
         id: 1,
         workspace_id: 1,
         engine: 'mysql',
+        security_tier: 'open',
         name_ref: 'prod',
         sort_order: 0,
         monitor_enabled: 1,
@@ -114,6 +116,7 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
         count: unused,
         create: unused,
         update: unused,
+        setTier: unused,
         remove: unused,
         reorder: unused,
         recordCheck: async (id, input) => {
@@ -132,6 +135,7 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
                 .filter(
                     (r) =>
                         r.monitor_enabled === 1 &&
+                        r.security_tier === 'open' &&
                         !pausedIds.includes(r.id) &&
                         (r.last_check_at === null || r.last_check_at + r.interval_seconds <= now)
                 )
@@ -455,6 +459,66 @@ describe('les alertes', () => {
         await monitor.checkNow(1, 1);
         assert.deepEqual(repo.alertChecks, []);
         assert.equal(deps.recorded.notifications.length, 0);
+    });
+});
+
+describe('une base protégée par mot de passe', () => {
+    /** Le chiffre d'une session déverrouillée : seul à ouvrir ce qu'il a scellé. */
+    const session: SdkCipher = {
+        encrypt: async (plain) => `session:${plain}`,
+        decrypt: async (blob) => blob.slice('session:'.length),
+        tryDecrypt: async (blob) => (blob.startsWith('session:') ? blob.slice('session:'.length) : null)
+    };
+    const guarded = (over: Partial<DatabaseRow> = {}) =>
+        row({ security_tier: 'guarded', secret_enc: 'session:secret', ...over });
+
+    it('n’entre jamais dans la boucle, et ne se relève pas sans le chiffre d’une session', async () => {
+        // Un relevé resté allumé en base ne suffit pas à la rendre due.
+        const repo = fakeRepo([guarded({ monitor_enabled: 1 })]);
+        const { deps, monitor, answer, opened } = monitorWith(repo);
+        answer({});
+        await deps.recorded.tickers[0].tick();
+        const probe = await monitor.checkNow(1, 1);
+        assert.equal(probe.ok, false);
+        assert.match(probe.error ?? '', /protégée par mot de passe/);
+        assert.equal(opened(), 0);
+        // Rien n'est écrit : le dernier relevé reste celui qu'on a fait en présence.
+        assert.equal(repo.rows[0].last_check_at, null);
+        assert.equal(repo.rows[0].status, 'unknown');
+        await assert.rejects(monitor.targetOf(repo.rows[0], 1), /protégée par mot de passe/);
+    });
+
+    it('se relève avec le chiffre de la session, qui ouvre ses secrets ; ses alertes ne sont pas évaluées', async () => {
+        const repo = fakeRepo([guarded()], [alert({ id: 10 })]);
+        const { monitor, answer, deps } = monitorWith(repo);
+        assert.equal((await monitor.targetOf(repo.rows[0], 1, session)).password, 'secret');
+
+        answer({ query: () => number(99) });
+        const probe = await monitor.checkNow(1, 1, session);
+        assert.equal(probe.ok, true);
+        assert.equal(repo.rows[0].status, 'up');
+        assert.deepEqual(repo.alertChecks, []);
+        assert.equal(deps.recorded.notifications.length, 0);
+    });
+
+    it('Sauvegardes la voit indisponible et ne l’ouvre pas ; un indicateur de projet reçoit la raison', async () => {
+        const repo = fakeRepo([guarded({ id: 1 }), row({ id: 2 })]);
+        const service = serverEntry.createService?.(createTestServiceDeps({ repo }));
+        const measure = service?.providers?.[DATABASE_MEASURE_PROVIDER] as DatabaseMeasureProvider | undefined;
+        const backup = service?.providers?.[DATABASE_BACKUP_PROVIDER] as DatabaseBackupProvider | undefined;
+        assert.ok(measure && backup);
+
+        // La liste et la recherche passent par la même fiche de candidat.
+        assert.match(
+            (await backup.findDatabase(1, 1))?.unavailable ?? '',
+            /ne peut pas être la source d’une sauvegarde/
+        );
+        assert.equal((await backup.findDatabase(2, 1))?.unavailable, undefined);
+        await assert.rejects(backup.openAccess(1, 1), /ne peut pas être la source d’une sauvegarde/);
+
+        const [outcome] = (await measure.measure(1, 1, ['SELECT 1'])) ?? [];
+        assert.equal(outcome.value, null);
+        assert.match(outcome.error ?? '', /protégée par mot de passe/);
     });
 });
 

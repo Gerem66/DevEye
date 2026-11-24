@@ -9,7 +9,7 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { withSession } from './probe';
 import { isFiring, runConditions } from './rules';
-import { databaseOfAlert, loadDatabase, toAlert, type Ctx, type StoredAlert } from './_shared';
+import { databaseOfAlert, GUARDED_IDLE, loadDatabase, toAlert, type Ctx, type StoredAlert } from './_shared';
 
 /**
  * Les alertes d'une base. Évaluées par le relevé périodique seulement (inertes
@@ -40,6 +40,7 @@ export const databaseAlertFeatures = [
                     'Cette base appartient à un autre espace : ses alertes se règlent depuis là-bas.'
                 );
             }
+            if (home.security_tier === 'guarded') throw new FeatureError('validation', GUARDED_IDLE);
             const cipher = ctx.cipher();
             const stored: StoredAlert = {
                 name: input.name.trim(),
@@ -65,6 +66,11 @@ export const databaseAlertFeatures = [
             const cipher = ctx.cipher();
             const existing = await ctx.repo.findAlert(input.alertId, ctx.workspaceId);
             if (!existing) throw new FeatureError('not_found', 'Alerte introuvable');
+            // Une alerte d'une base protégée se garde éteinte : rien ne l'évaluerait.
+            if (input.enabled) {
+                const home = await ctx.repo.find(existing.database_id, ctx.workspaceId);
+                if (home?.security_tier === 'guarded') throw new FeatureError('validation', GUARDED_IDLE);
+            }
 
             // Les dernières mesures sont conservées : elles décrivent la dernière
             // évaluation, qui reste vraie tant qu'une nouvelle n'a pas eu lieu.

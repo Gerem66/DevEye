@@ -834,29 +834,42 @@ par mot de passe : un serveur en marche les déchiffre seul, à tout moment. Les
 formulaires où se saisissent les identifiants d'infrastructure (base, tunnel,
 destination de sauvegarde, jeton, clé d'API, accès bancaire) le disent.
 
-| Identifiant                                                       | Colonne                                                                                                 | Ce qui s'en sert sans session                                    |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Mot de passe d'une base, mot de passe ou clé privée du tunnel SSH | `database_connections.secret_enc`, `access_secret_enc`                                                  | le relevé des bases suivies, la source « base » d'une sauvegarde |
-| Secret d'une destination de sauvegarde (S3, SFTP, WebDAV)         | `backup_destinations.secret_enc`                                                                        | le planificateur de sauvegardes                                  |
-| Identifiants IMAP et SMTP, jetons OAuth d'une boîte **ouverte**   | `mail_accounts.credentials_enc`                                                                         | la relève du courrier, l'envoi des alertes par mail              |
-| URL de webhook, adresse d'alerte                                  | `notification_channels.target_enc`                                                                      | tout envoi d'alerte                                              |
-| Jeton GitHub                                                      | `ft_git_credentials.secret_enc`                                                                         | le suivi des dépôts                                              |
-| Identifiants Dokploy et GitHub Actions                            | `ft_deploy_credentials.secret_enc`                                                                      | le suivi et le lancement des déploiements                        |
-| Clé `.p8` de l'App Store, clé de compte de service Google         | `ft_appstores_sources.secret_enc`                                                                       | la synchronisation des stores                                    |
-| Accès bancaire (clé Qonto, session Enable Banking)                | `ft_finance_connections.content`                                                                        | le relevé des comptes                                            |
-| Clés de fournisseurs (météo, NVD)                                 | `weather_provider_keys.key_enc`, `feature_kv`                                                           | les appels à ces services, l'ingestion des CVE                   |
-| Secret TOTP, numéro de téléphone                                  | `user_2fa.secret_enc`, `user_phones.phone_sealed`                                                       | la connexion, avant toute session                                |
-| Clés DKIM, clé de boîte, certificat TLS du serveur mail           | `ft_mailserver_domain_keys.private_key`, `ft_mailserver_mailboxes.blob_key`, `ft_mailserver_tls.sealed` | la réception et l'envoi du courrier hébergé                      |
+| Identifiant                                                                       | Colonne                                                                                                 | Ce qui s'en sert sans session                                    |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Mot de passe d'une base **ouverte**, mot de passe ou clé privée de son tunnel SSH | `database_connections.secret_enc`, `access_secret_enc`                                                  | le relevé des bases suivies, la source « base » d'une sauvegarde |
+| Secret d'une destination de sauvegarde (S3, SFTP, WebDAV)                         | `backup_destinations.secret_enc`                                                                        | le planificateur de sauvegardes                                  |
+| Identifiants IMAP et SMTP, jetons OAuth d'une boîte **ouverte**                   | `mail_accounts.credentials_enc`                                                                         | la relève du courrier, l'envoi des alertes par mail              |
+| URL de webhook, adresse d'alerte                                                  | `notification_channels.target_enc`                                                                      | tout envoi d'alerte                                              |
+| Jeton GitHub                                                                      | `ft_git_credentials.secret_enc`                                                                         | le suivi des dépôts                                              |
+| Identifiants Dokploy et GitHub Actions                                            | `ft_deploy_credentials.secret_enc`                                                                      | le suivi et le lancement des déploiements                        |
+| Clé `.p8` de l'App Store, clé de compte de service Google                         | `ft_appstores_sources.secret_enc`                                                                       | la synchronisation des stores                                    |
+| Accès bancaire (clé Qonto, session Enable Banking)                                | `ft_finance_connections.content`                                                                        | le relevé des comptes                                            |
+| Clés de fournisseurs (météo, NVD)                                                 | `weather_provider_keys.key_enc`, `feature_kv`                                                           | les appels à ces services, l'ingestion des CVE                   |
+| Secret TOTP, numéro de téléphone                                                  | `user_2fa.secret_enc`, `user_phones.phone_sealed`                                                       | la connexion, avant toute session                                |
+| Clés DKIM, clé de boîte, certificat TLS du serveur mail                           | `ft_mailserver_domain_keys.private_key`, `ft_mailserver_mailboxes.blob_key`, `ft_mailserver_tls.sealed` | la réception et l'envoi du courrier hébergé                      |
 
 Ce qui borne le dégât n'est donc pas le chiffrement mais le privilège donné :
 un compte de base en lecture seule, un jeton GitHub limité aux dépôts suivis,
 une clé S3 limitée à son préfixe. Une machine, elle, n'obéit qu'à la politique
 locale de son agent, que le serveur ne peut pas élargir (voir [L'agent](#lagent)).
 
+Deux de ces identifiants peuvent sortir du tableau, au choix de l'utilisateur,
+dans un espace personnel dont le compte a activé le chiffrement par mot de
+passe : ceux d'une **boîte mail protégée**, et le mot de passe et le secret
+d'accès d'une **base protégée par mot de passe**. Ils passent alors sous
+l'étage gardé, et le serveur ne s'en sert plus que pendant qu'une session est
+déverrouillée. Le prix est dit à l'écran : une boîte protégée ne se relève que
+consultée et n'envoie aucune alerte ; une base protégée n'a ni relevé
+automatique ni alerte, et ne peut être la source ni d'une sauvegarde ni d'un
+indicateur de projet. Seuls les deux secrets d'une base changent d'étage : son
+nom, son hôte, son compte et son dernier relevé restent à l'étage ouvert. Le
+serveur refuse l'étage protégé là où il ne protégerait rien (espace partagé,
+chiffrement par mot de passe éteint).
+
 Ce que le serveur ne peut pas déchiffrer, session verrouillée : l'étage gardé
 d'un espace personnel dont le compte a activé le chiffrement par mot de passe
-(coffre, notes privées, projets confidentiels, boîtes mail protégées), et un
-partage CloudSync chiffré de bout en bout.
+(coffre, notes privées, projets confidentiels, boîtes mail protégées, secrets
+des bases protégées), et un partage CloudSync chiffré de bout en bout.
 
 ## Ce qui reste en clair
 

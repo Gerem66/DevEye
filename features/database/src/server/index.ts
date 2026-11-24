@@ -28,7 +28,14 @@ import { databaseMove } from './move';
 import { createRepo, type DatabaseRepo } from './repo';
 import { DatabaseMonitor } from './service';
 import { openTunnel } from './tunnel';
-import { PLAN_PAUSED_MESSAGE, readJson, setMonitor, type StoredDatabase } from './_shared';
+import {
+    GUARDED_ABSENT,
+    GUARDED_NO_BACKUP,
+    PLAN_PAUSED_MESSAGE,
+    readJson,
+    setMonitor,
+    type StoredDatabase
+} from './_shared';
 
 /**
  * Ce que Sauvegardes demande (`DATABASE_BACKUP_PROVIDER`) : les bases nommées,
@@ -48,7 +55,9 @@ function createBackupProvider(
             name: stored.name ?? `Base ${row.id}`,
             engine: row.engine === 'postgres' ? 'postgres' : 'mysql',
             host: stored.host ?? '?',
-            database: stored.database ?? '?'
+            database: stored.database ?? '?',
+            // Une sauvegarde tourne sans session : les secrets d'une base protégée lui échappent.
+            ...(row.security_tier === 'guarded' ? { unavailable: GUARDED_NO_BACKUP } : {})
         };
     };
 
@@ -64,6 +73,7 @@ function createBackupProvider(
         async openAccess(databaseId, workspaceId) {
             const row = await deps.repo.find(databaseId, workspaceId);
             if (!row) return null;
+            if (row.security_tier === 'guarded') throw new Error(GUARDED_NO_BACKUP);
             // Pas de garde de pause ici : une sauvegarde est un travail de
             // Sauvegardes, que borne son propre stockage, pas le suivi des bases.
             const target = await monitor.targetOf(row, workspaceId);
@@ -102,6 +112,10 @@ function createMeasureProvider(
             if (queries.length === 0) return [];
             if (deps.pauses.isPaused('connections', String(row.id))) {
                 return queries.map(() => ({ value: null, error: PLAN_PAUSED_MESSAGE }));
+            }
+            // Un indicateur de projet se mesure sans session : hors de portée d'une base protégée.
+            if (row.security_tier === 'guarded') {
+                return queries.map(() => ({ value: null, error: GUARDED_ABSENT }));
             }
             // Le codec du DOMICILE : le secret d'une base projetée est scellé
             // sous la clé de son espace, pas sous celle d'où on la regarde.
@@ -230,6 +244,10 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
+        // Demandé avec le domicile de la base : seule une base ouverte se joint
+        // sous une clé que le serveur tient seul, donc depuis un autre espace.
+        shareable: async (repo, itemId, workspaceId) =>
+            (await repo.find(Number(itemId), workspaceId))?.security_tier === 'open',
         move: databaseMove,
         copy: databaseCopy
     },

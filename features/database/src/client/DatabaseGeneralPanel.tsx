@@ -25,6 +25,7 @@ import {
     connectionTarget,
     type ConnectionForm
 } from './ConnectionFields';
+import { GUARDED_IDLE } from './DatabaseTierChoice';
 import { ENGINE_LABELS, formatInterval } from './format';
 import { ProbeLine } from './ProbeLine';
 import styles from './style.module.css';
@@ -109,6 +110,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
 
     const patch = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
     const editable = canWrite && !busy;
+    const guarded = database.securityTier === 'guarded';
     const complete = connectionComplete(draft);
     const unchanged = sameDraft(draft, draftOf(database));
     const projects =
@@ -219,10 +221,14 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
                 <span className={shell.sectionLabel}>Relevé</span>
                 <Switch
                     checked={draft.monitorEnabled}
-                    disabled={!editable}
+                    disabled={!editable || guarded}
                     onChange={(monitorEnabled) => patch({ monitorEnabled })}
                     label='Relever cette base régulièrement'
-                    hint='Éteint (le réglage par défaut), la base n’est relevée qu’à l’ouverture de sa fiche. Allumé, DevEye relève sa taille et son état à la cadence choisie, fiche fermée comprise : c’est ce qui rend ses alertes vivantes.'
+                    hint={
+                        guarded
+                            ? `${GUARDED_IDLE} Elle se relève à l’ouverture de sa fiche, session déverrouillée ; sa protection se change dans l’onglet Chiffrement.`
+                            : 'Éteint (le réglage par défaut), la base n’est relevée qu’à l’ouverture de sa fiche. Allumé, DevEye relève sa taille et son état à la cadence choisie, fiche fermée comprise : c’est ce qui rend ses alertes vivantes.'
+                    }
                 />
             </div>
 

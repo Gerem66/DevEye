@@ -5,6 +5,7 @@ import type {
     DatabaseCondition,
     DatabaseKpi,
     DatabaseRow,
+    DatabaseSecurityTier,
     DatabaseUsage
 } from '../contracts/domain';
 import { databaseAlertSchema, databaseKpiSchema, databaseSchema } from '../contracts/domain';
@@ -23,9 +24,11 @@ import type { DatabaseMonitor } from './service';
 import type { TunnelConfig } from './tunnel';
 
 /**
- * Le socle de la feature : un seul chiffre, toujours l'étage ouvert (une base
- * appartient à l'espace, le relevé périodique lit tout sans session), et aucun
- * secret ne sort, les DTO n'en portent qu'un booléen.
+ * Le socle de la feature. La fiche d'une base est à l'étage ouvert : elle
+ * appartient à l'espace, et le relevé périodique la lit sans session. Ses deux
+ * secrets suivent `security_tier` : ouverts eux aussi, ou sous le mot de passe
+ * du compte (`secretsCipherFor`). Aucun secret ne sort, les DTO n'en portent
+ * qu'un booléen.
  */
 
 /** Le contexte du SDK, sur le dépôt du module. */
@@ -156,6 +159,17 @@ export async function assertSecretsStay(
  */
 export const PLAN_PAUSED_MESSAGE = 'Au-delà de l’offre : cette base est en pause.';
 
+/** Ce qu'une base protégée ne fait pas, dit là où on le lui demande. */
+export const GUARDED_IDLE =
+    'Une base protégée par mot de passe n’a ni relevé automatique ni alerte : le serveur ne peut la joindre qu’en votre présence.';
+
+/** Ce que reçoit un service qui la demande sans session : Projets pour un indicateur, le relevé de fond. */
+export const GUARDED_ABSENT =
+    'Cette base est protégée par mot de passe : le serveur ne peut la joindre qu’en votre présence, depuis sa fiche.';
+
+export const GUARDED_NO_BACKUP =
+    'Une base protégée par mot de passe ne peut pas être la source d’une sauvegarde : le serveur ne peut la joindre qu’en votre présence.';
+
 /** Le service de relevé, posé par `createService` au démarrage : un singleton par processus. */
 let monitorRef: DatabaseMonitor | null = null;
 
@@ -225,6 +239,45 @@ export async function databaseCipherFor(ctx: Ctx, row: Pick<DatabaseRow, 'id' | 
     return scope.cipherFor(String(row.id));
 }
 
+/**
+ * Le chiffre des deux secrets d'une base, pour une commande : celui de son
+ * étage. Une base protégée ne se partage pas, son chiffre est donc celui de la
+ * session, qui doit être déverrouillée : `locked` sinon, que l'écran traduit en
+ * invite du mot de passe.
+ */
+export async function secretsCipherFor(
+    ctx: Ctx,
+    row: Pick<DatabaseRow, 'id' | 'workspace_id' | 'security_tier'>
+): Promise<SdkCipher> {
+    if (row.security_tier !== 'guarded') return databaseCipherFor(ctx, row);
+    if (!(await ctx.secrecy.isUnlocked())) {
+        throw new FeatureError(
+            'locked',
+            'Cette base est protégée par votre mot de passe : déverrouillez votre session pour la joindre.'
+        );
+    }
+    return ctx.cipher('private');
+}
+
+/**
+ * L'étage protégé n'a de sens que là où le mot de passe du compte garde
+ * vraiment la clé : un espace personnel, chiffrement par mot de passe activé.
+ * Ailleurs, le serveur lirait les secrets seul, et le mot « protégée » mentirait.
+ */
+export async function assertTierAllowed(ctx: Ctx, tier: DatabaseSecurityTier): Promise<void> {
+    if (tier === 'open') return;
+    if (ctx.workspace.kind !== 'personal') {
+        throw new FeatureError(
+            'validation',
+            'Une base protégée n’existe que dans votre espace personnel : dans un espace partagé, ' +
+                'elle serait lisible par tous les membres.'
+        );
+    }
+    if (!(await ctx.secrecy.isPasswordProtected())) {
+        throw new FeatureError('validation', 'Activez d’abord le chiffrement par mot de passe, dans Sécurité.');
+    }
+}
+
 /** Le contrat de Projets ; absent, zéro projet partout et aucune commande ne casse. */
 export function projectsProvider(ctx: Pick<Ctx, 'providers'>): ProjectsUsageProvider | undefined {
     return ctx.providers.get<ProjectsUsageProvider>(PROJECTS_USAGE_PROVIDER);
@@ -255,6 +308,7 @@ export async function toDatabase(
         foreign,
         id: row.id,
         engine: row.engine === 'postgres' ? 'postgres' : 'mysql',
+        securityTier: row.security_tier === 'guarded' ? 'guarded' : 'open',
         name: body?.name ?? '',
         host: body?.host ?? '',
         port: body?.port ?? 3306,

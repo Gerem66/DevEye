@@ -218,6 +218,7 @@ CREATE TABLE `database_connections` (
   `id` int NOT NULL AUTO_INCREMENT,
   `workspace_id` int NOT NULL,
   `engine` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'mysql',
+  `security_tier` enum('open','guarded') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'open',
   `name_ref` char(32) COLLATE utf8mb4_general_ci NOT NULL,
   `sort_order` int NOT NULL DEFAULT '0',
   `monitor_enabled` tinyint NOT NULL DEFAULT '0',

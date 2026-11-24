@@ -56,9 +56,20 @@ export const databaseAccessSchema = z.object({
 });
 export type DatabaseAccess = z.infer<typeof databaseAccessSchema>;
 
+/**
+ * L'étage des deux secrets d'une base (son mot de passe, le secret de son
+ * accès). `open` : le serveur les lit seul, pour la relever et l'alerter.
+ * `guarded` : sous le mot de passe du compte, lisibles pendant qu'une session
+ * est déverrouillée ; ni relevé automatique, ni alerte, ni sauvegarde. Le reste
+ * de la fiche (nom, hôte, dernier relevé) est à l'étage ouvert dans les deux cas.
+ */
+export const databaseSecurityTierSchema = z.enum(['open', 'guarded']);
+export type DatabaseSecurityTier = z.infer<typeof databaseSecurityTierSchema>;
+
 export const databaseSchema = z.object({
     id: z.number().int().positive(),
     engine: databaseEngineSchema,
+    securityTier: databaseSecurityTierSchema,
     /** Le nom que lui donne l'utilisateur ; porte l'unicité dans l'espace. */
     name: z.string().max(DATABASE_NAME_MAX_LENGTH),
     host: z.string().max(DATABASE_HOST_MAX_LENGTH),
@@ -322,6 +333,7 @@ export interface DatabaseRow {
     id: number;
     workspace_id: number;
     engine: string;
+    security_tier: DatabaseSecurityTier;
     /** Condensé du nom en minuscules : porte l'unicité dans l'espace. */
     name_ref: string;
     sort_order: number;
@@ -337,11 +349,11 @@ export interface DatabaseRow {
     table_count: number | null;
     /** { name, host, port, database, username } chiffré. */
     content: string;
-    /** Mot de passe de la base, chiffré. Ne sort jamais du serveur. */
+    /** Mot de passe de la base, chiffré à l'étage `security_tier`. Ne sort jamais du serveur. */
     secret_enc: string | null;
     /** { kind, host, port, username, auth } chiffré. */
     access_content: string | null;
-    /** Mot de passe SSH ou clé privée, chiffré. Ne sort jamais du serveur. */
+    /** Mot de passe SSH ou clé privée, chiffré à l'étage `security_tier`. Ne sort jamais du serveur. */
     access_secret_enc: string | null;
     created: number;
     /** Les indicateurs, `StoredKpi[]` chiffré. */

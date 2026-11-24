@@ -6,18 +6,22 @@ import {
     databaseList,
     databaseRemove,
     databaseReorder,
+    databaseSetTier,
     databaseUpdate
 } from '../contracts/commands';
 import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayDeviceOptions } from '@deveye/types/sdk/server';
 
 import {
     assertSecretsStay,
+    assertTierAllowed,
     databaseCipherFor,
+    GUARDED_IDLE,
     loadDatabase,
     nameRef,
     projectCountsOf,
     projectUsageOf,
     reloadDatabase,
+    secretsCipherFor,
     toAlert,
     toDatabase,
     toKpis,
@@ -131,6 +135,10 @@ export const databaseCrudFeatures = [
             const cipher = ctx.cipher();
             const ref = nameRef(ctx.keys, ctx.workspaceId, input.name);
 
+            await assertTierAllowed(ctx, input.securityTier);
+            if (input.securityTier === 'guarded' && input.monitorEnabled) {
+                throw new FeatureError('validation', GUARDED_IDLE);
+            }
             // Le nom porte l'unicité dans l'espace.
             if (await ctx.repo.findByName(ctx.workspaceId, ref)) {
                 throw new FeatureError('conflict', 'Une base porte déjà ce nom dans cet espace.');
@@ -146,14 +154,22 @@ export const databaseCrudFeatures = [
                 ...(input.autoLoadTables ? {} : { tablesOnDemand: true as const })
             };
 
+            // Les secrets naissent sous la clé de leur étage : ceux d'une base
+            // protégée ne passent jamais sous celle que le serveur ouvre seul.
+            const secrets = await secretsCipherFor(ctx, {
+                id: 0,
+                workspace_id: ctx.workspaceId,
+                security_tier: input.securityTier
+            });
             const row = await ctx.repo.create({
                 workspaceId: ctx.workspaceId,
                 engine: input.engine,
                 nameRef: ref,
                 content: await cipher.encrypt(JSON.stringify(body)),
-                secretEnc: input.password ? await cipher.encrypt(input.password) : null,
+                secretEnc: input.password ? await secrets.encrypt(input.password) : null,
                 accessContent: await cipher.encrypt(JSON.stringify(await accessBody(ctx, input.access))),
-                accessSecretEnc: input.access.secret ? await cipher.encrypt(input.access.secret) : null,
+                accessSecretEnc: input.access.secret ? await secrets.encrypt(input.access.secret) : null,
+                securityTier: input.securityTier,
                 monitorEnabled: input.monitorEnabled,
                 intervalSeconds: input.intervalSeconds
             });
@@ -161,7 +177,7 @@ export const databaseCrudFeatures = [
             ctx.audit({
                 action: 'database.add',
                 description: 'Base de données ajoutée à l’espace',
-                metadata: { databaseId: row.id, engine: input.engine }
+                metadata: { databaseId: row.id, engine: input.engine, securityTier: input.securityTier }
             });
             return { database: await reloadDatabase(ctx, row.id) };
         }
@@ -182,6 +198,12 @@ export const databaseCrudFeatures = [
             }
             const cipher = ctx.cipher();
             const ref = nameRef(ctx.keys, ctx.workspaceId, input.name);
+            if (home.security_tier === 'guarded' && input.monitorEnabled) {
+                throw new FeatureError('validation', GUARDED_IDLE);
+            }
+            // Un secret ressaisi s'écrit sous la clé de l'étage de la base.
+            const resealed = input.password !== undefined || input.access.secret !== undefined;
+            const secrets = resealed ? await secretsCipherFor(ctx, home) : cipher;
 
             const clash = await ctx.repo.findByName(ctx.workspaceId, ref);
             if (clash && clash.id !== input.databaseId) {
@@ -213,20 +235,67 @@ export const databaseCrudFeatures = [
                     input.password === undefined
                         ? undefined
                         : input.password
-                          ? await cipher.encrypt(input.password)
+                          ? await secrets.encrypt(input.password)
                           : null,
                 accessContent: await cipher.encrypt(JSON.stringify(access)),
                 accessSecretEnc:
                     input.access.secret === undefined
                         ? undefined
                         : input.access.secret
-                          ? await cipher.encrypt(input.access.secret)
+                          ? await secrets.encrypt(input.access.secret)
                           : null,
                 monitorEnabled: input.monitorEnabled,
                 intervalSeconds: input.intervalSeconds
             });
             if (!row) throw new FeatureError('not_found', 'Base de données introuvable');
             return { database: await reloadDatabase(ctx, input.databaseId) };
+        }
+    }),
+    defineSdkFeature({
+        ...databaseSetTier,
+        access: { level: 'write', item: 'databaseId' },
+        mutates: true,
+        handler: async (ctx: Ctx, input) => {
+            const home = await loadDatabase(ctx, input.databaseId, 'write');
+            if (home.workspace_id !== ctx.workspaceId) {
+                throw new FeatureError(
+                    'forbidden',
+                    'Cette base appartient à un autre espace : sa protection se règle depuis là-bas.'
+                );
+            }
+            if (home.security_tier === input.securityTier) return { database: await reloadDatabase(ctx, home.id) };
+            await assertTierAllowed(ctx, input.securityTier);
+
+            // Lus sous la clé qu'on quitte, récrits sous celle où l'on va : dans
+            // les deux sens, la session doit tenir la clé du mot de passe.
+            const from = await secretsCipherFor(ctx, home);
+            const to = await secretsCipherFor(ctx, { ...home, security_tier: input.securityTier });
+            const reseal = async (blob: string | null): Promise<string | null> => {
+                if (!blob) return blob;
+                const plain = await from.tryDecrypt(blob);
+                if (plain === null) {
+                    throw new FeatureError(
+                        'conflict',
+                        'Un secret de cette base ne se relit plus : ressaisissez-le dans ses réglages avant de changer sa protection.'
+                    );
+                }
+                return to.encrypt(plain);
+            };
+            const changed = await ctx.repo.setTier(home.id, ctx.workspaceId, {
+                securityTier: input.securityTier,
+                secretEnc: await reseal(home.secret_enc),
+                accessSecretEnc: await reseal(home.access_secret_enc)
+            });
+            if (!changed) throw new FeatureError('not_found', 'Base de données introuvable');
+            ctx.audit({
+                action: 'database.tier',
+                description:
+                    input.securityTier === 'guarded'
+                        ? 'Base de données protégée par mot de passe'
+                        : 'Base de données rouverte au serveur',
+                metadata: { databaseId: home.id, securityTier: input.securityTier }
+            });
+            return { database: await reloadDatabase(ctx, home.id) };
         }
     }),
     defineSdkFeature({

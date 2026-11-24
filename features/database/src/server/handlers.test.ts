@@ -16,6 +16,7 @@ import {
     databaseQuery,
     databaseRemove,
     databaseReorder,
+    databaseSetTier,
     databaseTableList,
     databaseUpdate
 } from '../contracts/commands';
@@ -24,7 +25,10 @@ import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/typ
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
 
+import { databaseTree } from './copy';
 import { databaseHandlers } from './handlers';
+import { serverEntry } from './index';
+import { databaseMove } from './move';
 import type { DatabaseRepo, DatabaseWithStatsRow } from './repo';
 import { nameRef } from './_shared';
 
@@ -63,6 +67,7 @@ function row(over: Partial<DatabaseRow> & { id: number; workspace_id: number }):
     const name = `Base ${over.id}`;
     return {
         engine: 'mysql',
+        security_tier: 'open',
         name_ref: refOf(name, over.workspace_id),
         sort_order: over.id,
         monitor_enabled: 0,
@@ -152,11 +157,26 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 secret_enc: input.secretEnc,
                 access_content: input.accessContent,
                 access_secret_enc: input.accessSecretEnc,
+                security_tier: input.securityTier,
                 monitor_enabled: input.monitorEnabled ? 1 : 0,
                 interval_seconds: input.intervalSeconds
             });
             rows.push(created);
             return created;
+        },
+        async setTier(id, workspaceId, input) {
+            const target = rows.find((r) => r.id === id && r.workspace_id === workspaceId);
+            if (!target) return false;
+            Object.assign(target, {
+                security_tier: input.securityTier,
+                secret_enc: input.secretEnc,
+                access_secret_enc: input.accessSecretEnc
+            });
+            if (input.securityTier === 'guarded') {
+                target.monitor_enabled = 0;
+                for (const a of alerts) if (a.database_id === id) Object.assign(a, { enabled: 0, firing: 0 });
+            }
+            return true;
         },
         async update(id, workspaceId, input) {
             const target = rows.find((r) => r.id === id && r.workspace_id === workspaceId);
@@ -463,6 +483,7 @@ describe('database.add', () => {
         username: 'ro',
         password: 'secret',
         access: { ...ACCESS, kind: 'ssh' as const, host: 'bastion', username: 'ops', secret: 'clé' },
+        securityTier: 'open' as const,
         monitorEnabled: false,
         intervalSeconds: 300,
         autoLoadTables: false
@@ -507,6 +528,7 @@ describe('l’accès par un appareil', () => {
         username: 'dev',
         password: '',
         access: { ...ACCESS, kind: 'device' as const, deviceId },
+        securityTier: 'open' as const,
         monitorEnabled: false,
         intervalSeconds: 300,
         autoLoadTables: false
@@ -778,5 +800,170 @@ describe('les indicateurs', () => {
             [['a', 'Ventes', 'SELECT 4', '€']]
         );
         await assert.rejects(handlerFor(databaseKpiRemove)(ctx, { databaseId: 1, kpiId: 'b' }), failsWith('not_found'));
+    });
+});
+
+describe('une base protégée par mot de passe', () => {
+    const body = {
+        engine: 'mysql' as const,
+        name: 'Compta',
+        host: 'db.exemple.fr',
+        port: 3306,
+        database: 'compta',
+        username: 'ro',
+        password: 'secret',
+        access: ACCESS,
+        securityTier: 'guarded' as const,
+        monitorEnabled: false,
+        intervalSeconds: 300,
+        autoLoadTables: true
+    };
+    const guarded = (over: Partial<DatabaseRow> = {}) =>
+        row({ id: 1, workspace_id: 1, security_tier: 'guarded', secret_enc: 'secret', ...over });
+    const alertDraft = {
+        name: 'Trop d’erreurs',
+        enabled: true,
+        combinator: 'or' as const,
+        conditions: [{ sql: 'SELECT COUNT(*) FROM erreurs', comparator: 'gt' as const, threshold: 5, label: 'e' }],
+        message: 'Déjà {e} erreurs'
+    };
+
+    it('ne naît que là où le mot de passe garde vraiment la clé, et sans relevé', async () => {
+        const add = handlerFor(databaseAdd);
+        const shared = createTestContext({ repo: fakeRepo(), kind: 'shared' });
+        await assert.rejects(add(shared, body), /n’existe que dans votre espace personnel/);
+        const unprotected = createTestContext({ repo: fakeRepo(), passwordProtected: false });
+        await assert.rejects(add(unprotected, body), /Activez d’abord le chiffrement par mot de passe/);
+        await assert.rejects(
+            add(createTestContext({ repo: fakeRepo() }), { ...body, monitorEnabled: true }),
+            /ni relevé automatique ni alerte/
+        );
+        // Ses secrets s'écrivent sous la clé de la session : verrouillée, rien ne s'écrit.
+        const locked = fakeRepo();
+        await assert.rejects(add(createTestContext({ repo: locked, unlocked: false }), body), failsWith('locked'));
+        assert.equal(locked.rows.length, 0);
+
+        const repo = fakeRepo();
+        const out = await add(createTestContext({ repo }), body);
+        assert.equal(out.database.securityTier, 'guarded');
+        assert.equal(repo.rows[0].security_tier, 'guarded');
+        assert.equal(out.database.monitorEnabled, false);
+    });
+
+    it('se liste et s’ouvre session verrouillée, mais ne se joint qu’une fois déverrouillée', async () => {
+        const repo = seed(fakeRepo(), guarded());
+        const locked = createTestContext({ repo, unlocked: false });
+        assert.equal((await handlerFor(databaseList)(locked, {})).databases[0].securityTier, 'guarded');
+        assert.equal((await handlerFor(databaseGet)(locked, { databaseId: 1 })).database.name, 'Base 1');
+        await assert.rejects(handlerFor(databaseInspect)(locked, { databaseId: 1 }), failsWith('locked'));
+        await assert.rejects(
+            handlerFor(databaseQuery)(locked, { databaseId: 1, sql: 'SELECT 1' }),
+            failsWith('locked')
+        );
+        await assert.rejects(handlerFor(databaseTableList)(locked, { databaseId: 1 }), failsWith('locked'));
+        // Déverrouillée, la garde passe : sans service monté, c'est lui qui manque.
+        const unlocked = createTestContext({ repo });
+        await assert.rejects(handlerFor(databaseTableList)(unlocked, { databaseId: 1 }), failsWith('internal'));
+    });
+
+    it('refuse le relevé automatique et toute alerte active', async () => {
+        const repo = seed(fakeRepo(), guarded());
+        const ctx = createTestContext({ repo });
+        await assert.rejects(
+            handlerFor(databaseUpdate)(ctx, { databaseId: 1, ...SAME, name: 'Base 1' }),
+            /ni relevé automatique ni alerte/
+        );
+        await assert.rejects(
+            handlerFor(databaseAlertAdd)(ctx, { databaseId: 1, ...alertDraft }),
+            /ni relevé automatique ni alerte/
+        );
+        // Une alerte restée de l'époque ouverte se retouche éteinte, pas allumée.
+        const { alert: kept } = await handlerFor(databaseAlertAdd)(
+            createTestContext({ repo: seed(repo, row({ id: 2, workspace_id: 1 })) }),
+            { databaseId: 2, ...alertDraft }
+        );
+        repo.alerts[0].database_id = 1;
+        await assert.rejects(
+            handlerFor(databaseAlertUpdate)(ctx, { alertId: kept.id, ...alertDraft }),
+            /ni relevé automatique ni alerte/
+        );
+        const off = await handlerFor(databaseAlertUpdate)(ctx, { alertId: kept.id, ...alertDraft, enabled: false });
+        assert.equal(off.alert.enabled, false);
+    });
+
+    it('changer d’étage rechiffre les secrets, arrête le relevé et éteint les alertes', async () => {
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1, monitor_enabled: 1, secret_enc: 'secret' }));
+        await handlerFor(databaseAlertAdd)(createTestContext({ repo }), { databaseId: 1, ...alertDraft });
+        const setTier = handlerFor(databaseSetTier);
+        const to = { databaseId: 1, securityTier: 'guarded' as const };
+
+        await assert.rejects(setTier(createTestContext({ repo, kind: 'shared' }), to), failsWith('validation'));
+        await assert.rejects(
+            setTier(createTestContext({ repo, passwordProtected: false }), to),
+            /Activez d’abord le chiffrement par mot de passe/
+        );
+        // Il faut la clé du mot de passe pour écrire sous elle.
+        await assert.rejects(setTier(createTestContext({ repo, unlocked: false }), to), failsWith('locked'));
+        assert.equal(repo.rows[0].security_tier, 'open');
+
+        const ctx = createTestContext({ repo });
+        const out = await setTier(ctx, to);
+        assert.equal(out.database.securityTier, 'guarded');
+        assert.equal(out.database.monitorEnabled, false);
+        assert.equal(out.database.hasPassword, true);
+        assert.deepEqual(
+            repo.alerts.map((a) => [a.enabled, a.firing]),
+            [[0, 0]]
+        );
+        assert.deepEqual(
+            ctx.recorded.audits.map((a) => a.action),
+            ['database.tier']
+        );
+
+        // Le retour demande lui aussi la session : on relit sous la clé qu'on quitte.
+        const back = { databaseId: 1, securityTier: 'open' as const };
+        await assert.rejects(setTier(createTestContext({ repo, unlocked: false }), back), failsWith('locked'));
+        assert.equal((await setTier(createTestContext({ repo }), back)).database.securityTier, 'open');
+        // Ni le relevé ni les alertes ne se rallument seuls.
+        assert.equal(repo.rows[0].monitor_enabled, 0);
+        assert.equal(repo.alerts[0].enabled, 0);
+    });
+
+    it('ne se règle pas depuis une fenêtre, et le même étage ne réécrit rien', async () => {
+        const repo = seed(fakeRepo({ 7: [1] }), row({ id: 7, workspace_id: 42 }), row({ id: 1, workspace_id: 1 }));
+        const ctx = createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } });
+        await assert.rejects(
+            handlerFor(databaseSetTier)(ctx, { databaseId: 7, securityTier: 'guarded' }),
+            failsWith('forbidden')
+        );
+        const same = await handlerFor(databaseSetTier)(ctx, { databaseId: 1, securityTier: 'open' });
+        assert.equal(same.database.securityTier, 'open');
+        assert.deepEqual(ctx.recorded.audits, []);
+    });
+
+    it('ne se partage pas, ne se déplace pas, et sa copie arrive ouverte', async () => {
+        const repo = seed(fakeRepo(), guarded(), row({ id: 2, workspace_id: 1 }));
+        assert.equal(await serverEntry.items?.shareable?.(repo, '1', 1), false);
+        assert.equal(await serverEntry.items?.shareable?.(repo, '2', 1), true);
+
+        const q = {
+            query: async <T extends object>(sql: string, params: unknown[] = []) =>
+                (sql.includes("security_tier = 'guarded'")
+                    ? [{ n: repo.rows.some((r) => r.id === params[0] && r.security_tier === 'guarded') ? 1 : 0 }]
+                    : []) as unknown as T[],
+            execute: async () => ({ affectedRows: 0, insertId: 0 })
+        };
+        const { keys } = createTestContext();
+        const cipher = createTestContext().cipher();
+        const plan = (itemId: string) =>
+            databaseMove.plan({ q, repo, itemId, fromWorkspaceId: 1, toWorkspaceId: 2, cipher, keys });
+        assert.match((await plan('1')).blockers[0], /ne change pas d’espace/);
+        assert.deepEqual((await plan('2')).blockers, []);
+
+        // L'étage ne voyage pas plus que les secrets : la copie naît ouverte.
+        const [root] = databaseTree;
+        for (const column of ['security_tier', 'secret_enc', 'access_secret_enc']) {
+            assert.ok(root.omit?.includes(column), `${column} ne voyage pas`);
+        }
     });
 });

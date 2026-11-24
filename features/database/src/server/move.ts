@@ -21,13 +21,26 @@ import { databaseTree } from './copy';
 const CELLS = movableCellsOf(databaseTree);
 
 export const databaseMove: FeatureItemsMove<DatabaseRepo> = {
-    async plan({ q, itemId, toWorkspaceId, cipher, keys }) {
+    async plan({ q, itemId, fromWorkspaceId, toWorkspaceId, cipher, keys }) {
         const databaseId = Number(itemId);
         // Le nom est unique par espace (`uniq_database_name`), par un condensé lié
         // à l'espace : celui de l'arrivée se calcule depuis le nom, avant d'écrire
         // quoi que ce soit.
         const taken = await itemDigestTaken(q, databaseTree, databaseId, { cipher, keys, workspaceId: toWorkspaceId });
-        const blockers = taken ? ['Une base du même nom existe déjà dans cet espace.'] : [];
+        // Ses secrets sont sous le mot de passe de son propriétaire : aucun des
+        // deux espaces n'a de quoi les resceller.
+        const guarded = await q.query<{ n: number }>(
+            "SELECT COUNT(*) AS n FROM database_connections WHERE id = ? AND workspace_id = ? AND security_tier = 'guarded'",
+            [databaseId, fromWorkspaceId]
+        );
+        const blockers = [
+            ...(Number(guarded[0]?.n ?? 0) > 0
+                ? [
+                      'Une base protégée par mot de passe ne change pas d’espace : repassez-la en « Ouverte » dans ses réglages, onglet Chiffrement.'
+                  ]
+                : []),
+            ...(taken ? ['Une base du même nom existe déjà dans cet espace.'] : [])
+        ];
         return { blockers, drops: [], rows: await countMovableCells(q, CELLS, databaseId) };
     },
 

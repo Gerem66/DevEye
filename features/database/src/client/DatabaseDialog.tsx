@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Dialog, errorNote, ErrorNote, SegmentedControl, type ErrorNoteInput } from 'deveye-sdk-client';
-import type { DatabaseEngine, DatabaseProbe } from '../contracts/domain';
+import type { DatabaseEngine, DatabaseProbe, DatabaseSecurityTier } from '../contracts/domain';
 
 import { api } from './api';
 import {
@@ -11,6 +11,7 @@ import {
     EMPTY_CONNECTION,
     type ConnectionForm
 } from './ConnectionFields';
+import { DatabaseTierChoice } from './DatabaseTierChoice';
 import { ProbeLine } from './ProbeLine';
 import { ENGINE_LABELS, ENGINE_PORTS } from './format';
 import styles from './style.module.css';
@@ -28,18 +29,20 @@ const ENGINES: { value: DatabaseEngine; label: string }[] = (Object.keys(ENGINE_
     (id) => ({ value: id, label: ENGINE_LABELS[id] })
 );
 
-type Tab = 'connection' | 'access';
+type Tab = 'connection' | 'access' | 'protection';
 
 /**
  * Ajouter une base à l'espace. Rien d'autre : une fois ajoutée, une base se
- * règle dans l'onglet Général de sa fiche, comme tout élément. Deux onglets :
- * Connexion (obligatoire) et Accès (défaut valable). Le moteur ne se choisit
- * qu'ici, il ne se change pas après coup.
+ * règle dans l'onglet Général de sa fiche, comme tout élément. Trois onglets :
+ * Connexion (obligatoire), Accès et Protection (défauts valables). Le moteur
+ * ne se choisit qu'ici, il ne se change pas après coup ; la protection, elle,
+ * décide sous quelle clé les secrets saisis ici naissent.
  */
 export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) {
     const [engine, setEngine] = useState<DatabaseEngine>('mysql');
     const [form, setForm] = useState<ConnectionForm>(EMPTY_CONNECTION);
     const [tab, setTab] = useState<Tab>('connection');
+    const [tier, setTier] = useState<DatabaseSecurityTier>('open');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** L'essai en cours, et son résultat ; distinct de l'enregistrement. */
@@ -54,6 +57,7 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
         setTab('connection');
         setEngine('mysql');
         setForm(EMPTY_CONNECTION);
+        setTier('open');
     }, [open]);
 
     const patch = (p: Partial<ConnectionForm>) => setForm((f) => ({ ...f, ...p }));
@@ -80,6 +84,7 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
                 name: form.name.trim(),
                 ...connectionTarget(form),
                 password: form.password,
+                securityTier: tier,
                 ...MONITORING_DEFAULTS
             });
             onSaved(res.database.id);
@@ -160,6 +165,15 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
                     >
                         Accès
                     </button>
+                    <button
+                        type='button'
+                        role='tab'
+                        aria-selected={tab === 'protection'}
+                        className={tab === 'protection' ? styles.tabButtonOn : styles.tabButton}
+                        onClick={() => setTab('protection')}
+                    >
+                        Protection
+                    </button>
                 </div>
 
                 {tab === 'connection' && (
@@ -181,6 +195,13 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
                     <div className={styles.section}>
                         <span className={styles.sectionTitle}>Accès</span>
                         <AccessFields form={form} onChange={patch} />
+                    </div>
+                )}
+
+                {tab === 'protection' && (
+                    <div className={styles.section}>
+                        <span className={styles.sectionTitle}>Protection</span>
+                        <DatabaseTierChoice advise value={tier} onChange={setTier} disabled={busy} />
                     </div>
                 )}
 

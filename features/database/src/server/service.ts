@@ -4,7 +4,8 @@ import {
     mapLimit,
     relayForAuthor,
     type FeatureService,
-    type FeatureServiceDeps
+    type FeatureServiceDeps,
+    type SdkCipher
 } from '@deveye/types/sdk/server';
 
 import { explainError, isTargetFailure, openSession, type EngineTarget, type Session } from './engine';
@@ -12,6 +13,7 @@ import { buildNotice } from './notice';
 import type { DatabaseRepo } from './repo';
 import { isFiring, measure, renderMessage, runConditions } from './rules';
 import {
+    GUARDED_ABSENT,
     PLAN_PAUSED_MESSAGE,
     readJson,
     type StoredAccess,
@@ -28,6 +30,8 @@ import {
  * boucle, et une alerte n'est évaluée que si le relevé est actif. Notifie aux
  * transitions seulement (`database_alerts.firing`), par la façade `notify` du
  * SDK sur la route de la base. Tourne sans session : codec ouvert de l'espace.
+ * Une base protégée n'y entre donc jamais : elle n'est relevée que par une
+ * commande, qui apporte le chiffre de la session.
  */
 
 /** Cadence de l'ordonnanceur ; la cadence par base est sa propre colonne. */
@@ -77,17 +81,24 @@ export class DatabaseMonitor {
      * Relève une base maintenant, alertes comprises ; le même chemin pour
      * l'ordonnanceur et `database.inspect`. Ne lève jamais.
      */
-    checkNow(databaseId: number, workspaceId: number): Promise<DatabaseProbe> {
+    checkNow(databaseId: number, workspaceId: number, secrets?: SdkCipher): Promise<DatabaseProbe> {
         const running = this.inFlight.get(databaseId);
         if (running) return running;
-        const task = this.runCheck(databaseId, workspaceId).finally(() => this.inFlight.delete(databaseId));
+        const task = this.runCheck(databaseId, workspaceId, secrets).finally(() => this.inFlight.delete(databaseId));
         this.inFlight.set(databaseId, task);
         return task;
     }
 
-    /** La cible de connexion d'une ligne, secrets déchiffrés. Jamais rendue au client. */
-    async targetOf(row: DatabaseRow, workspaceId: number): Promise<EngineTarget> {
+    /**
+     * La cible de connexion d'une ligne, secrets déchiffrés. Jamais rendue au
+     * client. Les secrets d'une base protégée ne s'ouvrent que par `secrets`,
+     * le chiffre de la session qu'une commande apporte : sans lui, elle est
+     * hors de portée, et le dit.
+     */
+    async targetOf(row: DatabaseRow, workspaceId: number, secrets?: SdkCipher): Promise<EngineTarget> {
         const cipher = this.deps.cipherFor(workspaceId);
+        if (row.security_tier === 'guarded' && !secrets) throw new Error(GUARDED_ABSENT);
+        const sealed = secrets ?? cipher;
         const body = await readJson<StoredDatabase>(cipher, row.content);
         if (!body) throw new Error('Les réglages de cette base sont illisibles.');
         const access = (await readJson<StoredAccess>(cipher, row.access_content)) ?? {
@@ -103,17 +114,17 @@ export class DatabaseMonitor {
             port: body.port,
             database: body.database,
             username: body.username,
-            password: row.secret_enc ? await cipher.tryDecrypt(row.secret_enc) : null,
+            password: row.secret_enc ? await sealed.tryDecrypt(row.secret_enc) : null,
             access: {
                 ...access,
-                secret: row.access_secret_enc ? await cipher.tryDecrypt(row.access_secret_enc) : null,
+                secret: row.access_secret_enc ? await sealed.tryDecrypt(row.access_secret_enc) : null,
                 relay:
                     access.kind === 'device' ? await relayForAuthor(this.deps, workspaceId, access, 'cette base') : null
             }
         };
     }
 
-    private async runCheck(databaseId: number, workspaceId: number): Promise<DatabaseProbe> {
+    private async runCheck(databaseId: number, workspaceId: number, secrets?: SdkCipher): Promise<DatabaseProbe> {
         // Rien n'est écrit : le dernier relevé reste celui d'avant la pause.
         if (this.deps.pauses.isPaused('connections', String(databaseId))) {
             return { ok: false, serverVersion: null, elapsedMs: 0, error: PLAN_PAUSED_MESSAGE };
@@ -121,11 +132,15 @@ export class DatabaseMonitor {
         const started = Date.now();
         const row = await this.deps.repo.find(databaseId, workspaceId);
         if (!row) return { ok: false, serverVersion: null, elapsedMs: 0, error: 'Base introuvable.' };
+        // Sans le chiffre d'une session, une base protégée n'est pas relevée, et rien n'est écrit.
+        if (row.security_tier === 'guarded' && !secrets) {
+            return { ok: false, serverVersion: null, elapsedMs: 0, error: GUARDED_ABSENT };
+        }
 
         const cipher = this.deps.cipherFor(workspaceId);
         let session: Session | null = null;
         try {
-            session = await this.engine.openSession(await this.targetOf(row, workspaceId));
+            session = await this.engine.openSession(await this.targetOf(row, workspaceId, secrets));
             const inventory = await session.inventory();
             await this.deps.repo.recordCheck(databaseId, {
                 at: Math.floor(Date.now() / 1000),
@@ -136,7 +151,8 @@ export class DatabaseMonitor {
                 sizeBytes: inventory.sizeBytes,
                 tableCount: inventory.tableCount
             });
-            await this.evaluateAlerts(row, session);
+            // Une base protégée n'a pas d'alerte : ses indicateurs, eux, se mesurent quand on la relève.
+            if (row.security_tier !== 'guarded') await this.evaluateAlerts(row, session);
             await this.measureKpis(row, session);
             this.deps.live.changed(workspaceId);
             return {

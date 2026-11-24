@@ -2,6 +2,7 @@ import { DATABASE_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import Database from './Database';
+import DatabaseEncryptionPanel from './DatabaseEncryptionPanel';
 import DatabaseGeneralPanel from './DatabaseGeneralPanel';
 import DatabaseWidget from './DatabaseWidget';
 import { clientProvider } from './provider';
@@ -10,7 +11,7 @@ export const clientEntry: FeatureClient = {
     Widget: DatabaseWidget,
     Full: Database,
     /** Le panneau d'une base : Général (la base elle-même : connexion, accès, relevé, suppression). */
-    settingsPanels: { general: DatabaseGeneralPanel },
+    settingsPanels: { general: DatabaseGeneralPanel, encryption: DatabaseEncryptionPanel },
     // Démonté dès la fermeture : l'explorateur tient des résultats lus chez un
     // serveur tiers, qui n'ont pas à survivre à l'écran.
     cacheDurationMinutes: 0,

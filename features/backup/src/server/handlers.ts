@@ -571,9 +571,10 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
             }
             const databases = databaseProvider(ctx);
             if (!databases) throw new FeatureError('not_found', GUARDED_NAMES.database.module);
-            if (!(await databases.findDatabase(input.sourceId, ctx.workspaceId))) {
-                throw new FeatureError('not_found', GUARDED_NAMES.database.missing);
-            }
+            const candidate = await databases.findDatabase(input.sourceId, ctx.workspaceId);
+            if (!candidate) throw new FeatureError('not_found', GUARDED_NAMES.database.missing);
+            // Une base que son module dit hors de portée d'un travail sans session.
+            if (candidate.unavailable) throw new FeatureError('validation', candidate.unavailable);
             const verdict = await databases.authorize(input.sourceId, ctx.workspaceId, ctx.userId);
             if (!verdict.ok) refuseSource('database', verdict);
             return;
@@ -950,8 +951,8 @@ function databaseCandidates(ctx: Ctx, databases: DatabaseBackupProvider): Promis
                 name: row.name,
                 detail: `${row.engine} : ${row.host} / ${row.database}`,
                 tag: ENGINE_TAGS[row.engine],
-                available: true,
-                reason: null
+                available: row.unavailable === undefined,
+                reason: row.unavailable ?? null
             })
         )
     );

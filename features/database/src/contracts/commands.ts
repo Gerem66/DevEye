@@ -24,6 +24,7 @@ import {
     databaseProbeSchema,
     databaseRowsSchema,
     databaseSchema,
+    databaseSecurityTierSchema,
     databaseSortSchema,
     databaseSshAuthSchema,
     databaseStructureSchema,
@@ -97,6 +98,8 @@ export const databaseAdd = {
         username: z.string().max(DATABASE_USER_MAX_LENGTH),
         password: z.string().max(DATABASE_SECRET_MAX_LENGTH),
         access: accessInput,
+        /** Sous quelle clé ses secrets naissent : il se change ensuite par `database.setTier`. */
+        securityTier: databaseSecurityTierSchema,
         monitorEnabled: z.boolean(),
         intervalSeconds: z.number().int().min(60).max(86400),
         autoLoadTables: z.boolean()
@@ -120,6 +123,16 @@ export const databaseUpdate = {
         intervalSeconds: z.number().int().min(60).max(86400),
         autoLoadTables: z.boolean()
     }),
+    output: z.object({ database: databaseSchema })
+};
+
+/**
+ * Change l'étage des secrets d'une base : ils sont rechiffrés sous l'autre clé.
+ * Vers `guarded`, son relevé s'arrête et ses alertes s'éteignent.
+ */
+export const databaseSetTier = {
+    command: 'database.setTier' as const,
+    input: z.object({ databaseId, securityTier: databaseSecurityTierSchema }),
     output: z.object({ database: databaseSchema })
 };
 
@@ -377,6 +390,7 @@ export const databaseCommands = [
     databaseGet,
     databaseAdd,
     databaseUpdate,
+    databaseSetTier,
     databaseDevices,
     databaseRemove,
     databaseReorder,

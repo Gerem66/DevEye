@@ -83,18 +83,41 @@ d'une base qui se dégrade, bien avant qu'elle devienne injoignable.
 
 ## 2. Les invariants
 
-### 2.1 Toujours à l'étage ouvert
+### 2.1 La fiche à l'étage ouvert, les secrets à l'étage choisi
 
 Une base est d'espace et peut servir des projets de paliers différents ; elle ne
-peut donc suivre aucun d'eux. Tout (réglages, secrets, alertes) est chiffré
-sous la clé de l'espace (`ctx.cipher()` dans les handlers, `deps.cipherFor(ws)`
-dans le service : l'étage ouvert du SDK). Conséquences assumées :
+peut donc suivre aucun d'eux. Sa fiche (réglages, dernier relevé, indicateurs,
+alertes) est chiffrée sous la clé de l'espace (`ctx.cipher()` dans les handlers,
+`deps.cipherFor(ws)` dans le service : l'étage ouvert du SDK). Conséquences
+assumées :
 
-- rien ici ne demande jamais de mot de passe ;
+- la liste, le nom et les liens de projet se lisent sans mot de passe ;
 - le relevé périodique lit tout sans session, ce qui est exactement ce dont il a
   besoin ;
 - **un projet confidentiel ne peut pas lier de base**, et passer un projet en
   confidentiel délie les siennes (les bases, elles, survivent).
+
+Ses deux secrets suivent `security_tier`. **Ouverte** (le défaut), ils sont sous
+la même clé que le reste. **Protégée par mot de passe** (`guarded`), ils passent
+sous la clé que le mot de passe du compte garde (`ctx.cipher('private')`), et
+le serveur ne peut plus joindre la base seul :
+
+- `secretsCipherFor` rend le chiffre des secrets à une commande, et répond
+  `locked` session verrouillée ; l'envoi du client (`api.ts`) ouvre alors
+  l'invite du mot de passe et rejoue la commande ;
+- `DatabaseMonitor.targetOf` et `checkNow` reçoivent ce chiffre de la commande.
+  Sans lui, une base protégée n'est ni jointe ni relevée, et `listDue` ne la
+  rend jamais : **ni relevé automatique, ni alerte** (les alertes s'éteignent au
+  passage, et ne se rallument pas seules au retour) ;
+- Sauvegardes la voit indisponible (`DatabaseBackupCandidate.unavailable`),
+  Projets reçoit la raison à la place d'une mesure ;
+- elle n'existe que dans un espace personnel dont le compte a activé le
+  chiffrement par mot de passe (`assertTierAllowed`, vérifié par le serveur),
+  ne se partage pas (`items.shareable`) et ne se déplace pas ; sa copie arrive
+  ouverte, sans secret.
+
+L'étage se choisit à la création (onglet Protection) et se change dans l'onglet
+Chiffrement des réglages (`database.setTier`), qui rechiffre les deux secrets.
 
 Une base **projetée** vers un autre espace (`shareTier: 'open'`, voir
 [Docs/SHARING.md](../../Docs/SHARING.md)) reste chiffrée chez elle : les listages choisissent

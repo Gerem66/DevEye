@@ -430,6 +430,34 @@ describe('Backup : moteur, les droits de l’auteur, relus à chaque passage', (
         assert.equal(opened, 0);
     });
 
+    it('une base devenue protégée par mot de passe ne se vide plus : le run dit pourquoi, sans ouvrir d’accès', async () => {
+        let opened = 0;
+        const reason = 'Une base protégée par mot de passe ne peut pas être la source d’une sauvegarde.';
+        const databases: DatabaseBackupProvider = {
+            listDatabases: async () => [],
+            findDatabase: async () => ({
+                id: 7,
+                name: 'Prod',
+                engine: 'mysql',
+                host: 'db',
+                database: 'shop',
+                unavailable: reason
+            }),
+            openAccess: async () => {
+                opened += 1;
+                return null;
+            },
+            authorize: async () => ({ ok: true })
+        };
+        const { engine, job, finished } = engineFor({
+            job: { source_kind: 'database', source_id: 7, content: JSON.stringify({ name: 'Prod', authorUserId: 5 }) },
+            providers: { [DATABASE_BACKUP_PROVIDER]: databases }
+        });
+        await engine.trigger(job, 5);
+        assert.equal((await finished).run.error, reason);
+        assert.equal(opened, 0);
+    });
+
     it('un dossier hébergé ne s’archive plus quand son auteur ne peut plus le lire', async () => {
         const hosting: TreeBackupProvider = {
             list: async () => [],

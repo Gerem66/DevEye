@@ -5,12 +5,14 @@ import {
     ErrorNote,
     invalidate,
     settingsStyles as shell,
+    useSecrecy,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { DATABASE_KPI_MAX, type Database, type DatabaseAlert, type DatabaseKpi } from '../contracts/domain';
 
 import { AlertDialog, type AlertDraft } from './AlertDialog';
 import { api } from './api';
+import { GUARDED_IDLE } from './DatabaseTierChoice';
 import { formatAgo, formatBytes, formatCount, formatInterval, formatKpiValue, formatMs, STATUS_META } from './format';
 import { KpiDialog } from './KpiDialog';
 import styles from './style.module.css';
@@ -47,6 +49,11 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
     // Une base projetée se règle chez elle : le serveur le refuse ici.
     const editable = canWrite && !database.foreign;
     const canInspect = canWrite && !database.planPaused;
+    const guarded = database.securityTier === 'guarded';
+    const secrecy = useSecrecy();
+    // Une base protégée ne se joint que session déverrouillée : s'afficher ne
+    // doit pas suffire à ouvrir l'invite du mot de passe, « Relever » le fait.
+    const reachable = !guarded || !secrecy.enabled || secrecy.unlocked;
 
     const [inspecting, setInspecting] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
@@ -72,11 +79,11 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
     /** La base dont l'affichage a déjà été traité : un relevé au plus par ouverture. */
     const openedFor = useRef<number | null>(null);
     useEffect(() => {
-        if (!canInspect || openedFor.current === databaseId) return;
+        if (!canInspect || !reachable || openedFor.current === databaseId) return;
         openedFor.current = databaseId;
         const age = database.lastCheckAt === null ? Infinity : Date.now() / 1000 - database.lastCheckAt;
         if (age > FRESH_SECONDS) void inspect();
-    }, [canInspect, databaseId, database.lastCheckAt, inspect]);
+    }, [canInspect, reachable, databaseId, database.lastCheckAt, inspect]);
 
     /** Touche la fiche (tuiles, règles) et la liste (le compte d'alertes). */
     const changed = () => invalidate('database.detail', 'database.list');
@@ -117,7 +124,11 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
                 <Stat
                     label='Surveillance'
                     value={
-                        database.monitorEnabled ? `toutes les ${formatInterval(database.intervalSeconds)}` : 'éteinte'
+                        guarded
+                            ? 'en votre présence'
+                            : database.monitorEnabled
+                              ? `toutes les ${formatInterval(database.intervalSeconds)}`
+                              : 'éteinte'
                     }
                 />
                 <Stat label='Dernier relevé' value={inspecting ? 'en cours…' : formatAgo(database.lastCheckAt)} />
@@ -126,6 +137,23 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
                 <Stat label='Tables' value={formatCount(database.tableCount)} />
                 <Stat label='Version' value={database.serverVersion ?? '–'} />
             </section>
+
+            {guarded && !reachable && canInspect && (
+                <section className={styles.panel}>
+                    <header className={styles.panelHead}>
+                        <div className={styles.panelLead}>
+                            <h3 className={styles.panelTitle}>Base protégée</h3>
+                            <p className={styles.panelNote}>
+                                Votre session est verrouillée : ce que vous lisez ici date du dernier relevé. La relever
+                                demande votre mot de passe.
+                            </p>
+                        </div>
+                        <Button variant='secondary' icon='lock' disabled={inspecting} onClick={() => void inspect()}>
+                            {inspecting ? 'Relevé…' : 'Relever maintenant'}
+                        </Button>
+                    </header>
+                </section>
+            )}
 
             {onOpenTables && canWrite && (
                 <section className={styles.panel}>
@@ -236,7 +264,7 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
                             </span>
                         )}
                     </h3>
-                    {editable && (
+                    {editable && !guarded && (
                         <Button
                             variant='secondary'
                             icon='add'
@@ -247,7 +275,9 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
                     )}
                 </header>
 
-                {!database.monitorEnabled && alerts.length > 0 && (
+                {guarded && <p className={styles.hint}>{GUARDED_IDLE}</p>}
+
+                {!guarded && !database.monitorEnabled && alerts.length > 0 && (
                     <p className={styles.warn}>
                         La surveillance est éteinte : ces alertes ne sont évaluées{' '}
                         <strong>qu’à l’ouverture de cette fiche</strong>. Activez le relevé régulier dans les réglages
@@ -255,7 +285,7 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
                     </p>
                 )}
 
-                {alerts.length === 0 && (
+                {alerts.length === 0 && !guarded && (
                     <p className={styles.hint}>
                         Aucune alerte. Une alerte compare le résultat de requêtes à des seuils (nombre d’erreurs de la
                         dernière heure, utilisateurs actifs, lignes en attente) et prévient sur les canaux de l’espace.
@@ -321,7 +351,7 @@ export function DatabaseOverview({ database, alerts, kpis, canWrite, onOpenTable
                                 : undefined
                         }
                         onCreateAlert={
-                            editedKpi
+                            editedKpi && !guarded
                                 ? () => {
                                       setKpiDialog(null);
                                       setAlertDialog({ alert: null, draft: alertDraftOf(editedKpi) });

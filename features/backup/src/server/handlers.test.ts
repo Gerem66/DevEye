@@ -825,6 +825,24 @@ describe('Backup : handlers', () => {
         const out = (await create.handler(ctx, { ...body, sourceId: 7 })) as { job: { sourceName: string | null } };
         assert.equal(out.job.sourceName, 'Prod');
         assert.equal(repo.jobs[0].source_id, 7);
+
+        // Une base que son module dit hors de portée d'un travail sans session :
+        // grisée au sélecteur avec sa raison, et refusée si on la force.
+        const reason = 'Une base protégée par mot de passe ne peut pas être la source d’une sauvegarde.';
+        const candidate = { id: 7, name: 'Prod', engine: 'mysql' as const, host: 'db', database: 'shop' };
+        const guarded: DatabaseBackupProvider = {
+            ...databases,
+            listDatabases: async () => [{ ...candidate, unavailable: reason }],
+            findDatabase: async () => ({ ...candidate, unavailable: reason })
+        };
+        const closed = createTestContext({ repo, workspaceId: 1, providers: { [DATABASE_BACKUP_PROVIDER]: guarded } });
+        const sources = await handlerFor(backupSources)(closed, {});
+        assert.deepEqual(
+            sources.candidates.filter((c) => c.kind === 'database').map((c) => [c.name, c.available, c.reason]),
+            [['Prod', false, reason]]
+        );
+        await assert.rejects(create.handler(closed, { ...body, sourceId: 7 }), (e) => failsWith('validation')(e));
+        assert.equal(repo.jobs.length, 1);
     });
     describe('fichiers d’une machine', () => {
         const NAS = '11111111-1111-4111-8111-111111111111';

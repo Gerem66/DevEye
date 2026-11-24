@@ -27,10 +27,12 @@ export const databaseTree: ItemTree = [
         sealed: ['content', 'secret_enc', 'access_content', 'access_secret_enc', 'last_error', 'kpis', 'kpi_values'],
         // Une copie passe par le navigateur de qui la fait, qui peut n'avoir que
         // la lecture : les secrets restent sur le serveur, rescellés au seul
-        // déplacement.
+        // déplacement. Sans eux, elle arrive ouverte, quel que soit l'étage
+        // de l'originale.
         omit: [
             'secret_enc',
             'access_secret_enc',
+            'security_tier',
             'last_check_at',
             'last_elapsed_ms',
             'status',

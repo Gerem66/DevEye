@@ -17,6 +17,7 @@ const draft = (name: string) => ({
     username: 'essai',
     password: 'secret',
     access: { kind: 'direct' as const, host: '', port: null, username: '', auth: 'password' as const, deviceId: null },
+    securityTier: 'open' as const,
     monitorEnabled: false,
     intervalSeconds: 300,
     autoLoadTables: false

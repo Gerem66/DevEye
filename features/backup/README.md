@@ -219,6 +219,13 @@ de données un accès ouvert (`DATABASE_BACKUP_PROVIDER`, `openAccess`, lu par
 tunnel, et referme quand le flux s'achève. Une base joignable par Bases de
 données est donc sauvegardable sans configuration supplémentaire.
 
+Une base protégée par mot de passe ne l'est pas : ses secrets ne s'ouvrent
+qu'en présence de son propriétaire, et un travail tourne sans session. Bases de
+données le dit dans la fiche qu'il rend (`unavailable`) : le sélecteur la
+montre grisée avec la phrase, l'enregistrement d'un travail la refuse, et un
+travail qui visait une base devenue protégée échoue au lancement avec la même
+phrase.
+
 Un vidage livre toutes les lignes : le droit exigé de l'auteur est celui qui
 explore la base dans Bases de données, l'**écriture** sur elle, surcharge de
 l'élément comprise (`authorize` du contrat).
