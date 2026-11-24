@@ -920,10 +920,11 @@ parfois son mot de passe par erreur), le nom d'une base de données
 (`slug_ref`, lié à l'espace), ses branches, ses tags et ses auteurs (liés au
 dépôt), et ceux d'Audience : le nom d'un site (lié à l'espace), celui d'un
 entonnoir et d'un formulaire, les libellés mesurés et les réponses comptées
-(liés au site), et l'empreinte d'un constat du module Audit (liée au dépôt
+(liés au site), l'empreinte d'un constat du module Audit (liée au dépôt
 audité) : celle d'un secret trouvé dans un dépôt ne confirme plus ce secret à
-qui le devinerait. Les condensés des Liens courts et des Stores sont encore
-des SHA-256 nus.
+qui le devinerait, ceux des Stores : la fiche d'une app chez un store (liée à
+l'espace) et ses avis (liés à l'app), et celui des Liens courts : le site d'où
+vient une visite (lié à l'espace).
 
 Un condensé lié à un espace ne le quitte pas : une copie arrive avec ceux de
 sa destination, un déplacement les recalcule. Les lignes écrites sous l'ancien

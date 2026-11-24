@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
+import { rekeyTreeDigests, type FeatureServer, type SdkCipher } from '@deveye/types/sdk/server';
 
 import { monthOf, now, openContent, setRuntime, SHORT_HOST } from './_shared';
 import { env, SHORTLINKS_ENV } from './env';
@@ -11,6 +11,7 @@ import { Counters } from './counters';
 import { createDomainHooks } from './domains';
 import { shortlinksE2e } from './e2e';
 import { linkHandlers } from './handlers';
+import { labelsTree } from './labels';
 import { shortlinksMailSamples } from './mails';
 import { moderationHandlers } from './moderation';
 import { createRedirector } from './redirect';
@@ -44,6 +45,22 @@ export const serverEntry: FeatureServer<ShortlinksRepo> = {
     createRepo,
     features: [...linkHandlers, ...moderationHandlers],
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    dataSteps: [
+        {
+            // Le condensé d'un site d'origine, jusque-là le même dans tous les espaces, passe à `keys.ref`.
+            id: '001-keyed-refs',
+            async run({ q, cipherFor, keys, logger }) {
+                const pass = await rekeyTreeDigests(q, labelsTree, { cipherFor, keys });
+                // Une étiquette écartée ne reçoit plus de visites : son site en ouvrira une autre, et paraîtra deux fois.
+                if (pass.unreadable > 0 || pass.duplicates > 0) {
+                    logger.error(
+                        { unreadable: pass.unreadable, duplicates: pass.duplicates },
+                        'Liens courts : des sites d’origine illisibles ou en double ont été écartés'
+                    );
+                }
+            }
+        }
+    ],
     domains: createDomainHooks(),
     quotas: {
         links: { list: (repo, owned) => repo.links.listStock(owned) },

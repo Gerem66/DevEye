@@ -8,6 +8,7 @@ import { linkRow, memoryRepo } from './_testing';
 import { createChecker, type CheckVerdict } from './checker';
 import { Counters, primaryLanguage } from './counters';
 import { serverEntry } from './index';
+import { labelRef } from './labels';
 import { bucketSeries, rangeWindow } from './stats';
 
 /**
@@ -54,6 +55,11 @@ describe('les compteurs', () => {
         // Le site d'origine passe par son étiquette chiffrée : la table n'en garde que l'identifiant.
         assert.equal(repo.labelRows.length, 1);
         assert.equal(repo.labelRows[0].content, 'www.google.com');
+        assert.equal(
+            repo.labelRows[0].label_ref,
+            labelRef(deps.keys, repo.rows[0].workspace_id, 'www.google.com'),
+            'le condensé est celui de l’espace du lien'
+        );
         assert.deepEqual(of('referrer').sort(), [
             ['', 1],
             ['1', 1]

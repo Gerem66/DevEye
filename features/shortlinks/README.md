@@ -151,8 +151,9 @@ s'accumulent en mémoire et un ticker les vide chaque seconde.
   du `Referer`, jamais l'URL entière). Les cinq premiers sont des codes en clair
   d'un vocabulaire fermé, qu'un condensé révélerait de toute façon. Le site
   d'origine passe par une étiquette chiffrée de l'espace
-  (`ft_shortlinks_labels`, condensé à clé `label-ref`), ce qui permet de grouper
-  sans le stocker en clair.
+  (`ft_shortlinks_labels`, condensé à clé lié à l'espace, `keys.ref`), ce qui
+  permet de grouper sans le stocker en clair, et sans que le même site se
+  reconnaisse d'un espace à l'autre.
 - Les sommes vont dans `ft_shortlinks_daily` (ouvertures, visites, robots par
   lien et par jour), les totaux du lien, et l'usage du mois de l'espace
   (`ft_shortlinks_usage`), sur l'espace et non sur le lien pour qu'un lien

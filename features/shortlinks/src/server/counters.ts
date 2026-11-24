@@ -1,5 +1,3 @@
-import { createHmac } from 'node:crypto';
-
 import {
     normalizeReferrer,
     parseUserAgent,
@@ -10,6 +8,7 @@ import {
 
 import { SHORTLINK_REFERRER_MAX } from '../contracts/domain';
 import { dayOf, monthOf, now } from './_shared';
+import { labelRef } from './labels';
 import type { DailyDelta, DimDelta, ShortlinksRepo } from './repo';
 
 /**
@@ -70,7 +69,6 @@ export function primaryLanguage(header: string | undefined): string {
 
 export class Counters {
     private readonly visitorSalt: string;
-    private readonly labelKey: Buffer;
     private seenDay = dayOf(now());
     private seen = new Set<string>();
     private clicks = new Map<string, DailyDelta>();
@@ -85,7 +83,6 @@ export class Counters {
 
     constructor(private readonly deps: FeatureServiceDeps<ShortlinksRepo>) {
         this.visitorSalt = Buffer.from(deps.keys.derive('shortlinks', 'visitor-salt', 32)).toString('hex');
-        this.labelKey = Buffer.from(deps.keys.derive('shortlinks', 'label-ref', 32));
     }
 
     /** Les visites comptées ici et pas encore écrites. */
@@ -196,7 +193,7 @@ export class Counters {
         const cacheKey = `${workspaceId}:${host}`;
         const hit = this.labels.get(cacheKey);
         if (hit !== undefined) return hit;
-        const ref = createHmac('sha256', this.labelKey).update(host).digest('hex').slice(0, 32);
+        const ref = labelRef(this.deps.keys, workspaceId, host);
         const content = await this.deps.cipherFor(workspaceId).encrypt(host);
         const id = await this.deps.repo.counters.resolveLabel(workspaceId, 'referrer', ref, content);
         if (this.labels.size >= 20_000) this.labels.clear();
