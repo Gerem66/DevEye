@@ -7,12 +7,21 @@ import { SMTPServer } from 'smtp-server';
 import { dayOf, isServing, now, seal } from '../_shared';
 import type { Authenticator } from '../engine/auth';
 import { IpLimiter, SlidingCounter } from '../engine/limits';
-import { FLAG, type MailStore } from '../engine/mailstore';
+import { FLAG, HeadersTooLargeError, type MailStore } from '../engine/mailstore';
 import type { TlsStore } from '../engine/tls';
 import { headerOf, parseHeaders } from '../mime/tree';
 import type { MailserverRepo } from '../repo';
 import type { SmtpListener } from './inbound';
-import { close, collect, followCertificate, listen, receivedHeader, smtpError, tlsOptions } from './shared';
+import {
+    close,
+    collect,
+    followCertificate,
+    HEADERS_TOO_LARGE,
+    listen,
+    receivedHeader,
+    smtpError,
+    tlsOptions
+} from './shared';
 
 /**
  * La soumission : le courrier qu'un client authentifié confie au serveur pour
@@ -177,6 +186,10 @@ export function createSubmissionServer(deps: SubmissionDeps, implicitTls: boolea
                 // copie est un confort : une boîte pleine s'en passe, elle n'empêche pas l'envoi.
                 const room = mailbox.used_bytes + raw.length <= mailbox.quota_bytes;
                 const sent = user.saveSent && room ? await deps.repo.findFolder(mailbox.id, 'Sent') : null;
+                // Avant la file : un message refusé ici ne doit pas être déjà parti.
+                const meta = await deps.store.sealMeta(mailbox, raw).catch((error: unknown) => {
+                    throw error instanceof HeadersTooLargeError ? smtpError(552, HEADERS_TOO_LARGE) : error;
+                });
                 const blob = await deps.store.writeBlob(mailbox, raw);
                 const references = recipients.length + (sent ? 1 : 0);
                 if (references > 1) await deps.repo.refBlob(blob.id, references - 1);
@@ -194,7 +207,7 @@ export function createSubmissionServer(deps: SubmissionDeps, implicitTls: boolea
                 hourly.add(mailbox.id, nowMs, recipients.length);
 
                 if (sent) {
-                    await deps.store.appendBlob(mailbox, sent, blob, await deps.store.sealMeta(mailbox, raw), {
+                    await deps.store.appendBlob(mailbox, sent, blob, meta, {
                         flags: FLAG.Seen,
                         internalDate: now(),
                         size: raw.length

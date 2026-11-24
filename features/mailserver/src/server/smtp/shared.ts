@@ -4,6 +4,9 @@ import type { SMTPServer } from 'smtp-server';
 
 import { TLS_POLICY, type TlsStore } from '../engine/tls';
 
+/** Le refus d'un message dont les en-têtes dépassent ce que sa ligne garde (`MAX_HEADER_BYTES`). */
+export const HEADERS_TOO_LARGE = '5.3.4 Message header too large';
+
 /** Une réponse SMTP de refus, que `smtp-server` lit sur l'erreur qu'on lui rend. */
 export function smtpError(responseCode: number, message: string): Error {
     return Object.assign(new Error(message), { responseCode });

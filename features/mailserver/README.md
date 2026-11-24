@@ -89,7 +89,12 @@ suffit à ne jamais les recevoir.
 - TLS implicite seulement (993). Aucune session ne commence en clair.
 - `mime/tree.ts` calcule une fois, à la remise, les positions et les comptes de
   lignes que `BODYSTRUCTURE` et `BODY[1.2]` exigent : aucun analyseur de
-  courrier ne les donne.
+  courrier ne les donne. Il s'arrête à mille parties et vingt niveaux.
+- Les en-têtes d'un message sont gardés avec cet arbre (`meta`), donc bornés :
+  au-delà d'un mégaoctet (`MAX_HEADER_BYTES`, `engine/mailstore.ts`), le
+  message est refusé, en `552 5.3.4` à la réception comme à l'envoi, en
+  `NO [TOOBIG]` sur un `APPEND`, et rendu à son expéditeur s'il était déjà en
+  file.
 - `mailboxView.ts` tient les numéros de séquence de la session. Ce que d'autres
   font au dossier attend qu'IMAP permette de l'annoncer : tout de suite en
   IDLE, à la fin d'une commande sinon, jamais pendant un FETCH, STORE ou SEARCH

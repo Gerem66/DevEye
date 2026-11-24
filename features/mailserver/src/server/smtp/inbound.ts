@@ -4,10 +4,19 @@ import { SMTPServer } from 'smtp-server';
 import type { Delivery } from '../engine/delivery';
 import type { EventRecorder } from '../engine/events';
 import { IpLimiter } from '../engine/limits';
-import { OverQuotaError } from '../engine/mailstore';
+import { HeadersTooLargeError, OverQuotaError } from '../engine/mailstore';
 import type { TlsStore } from '../engine/tls';
 import type { MailboxRow } from '../repo';
-import { close, collect, followCertificate, listen, receivedHeader, smtpError, tlsOptions } from './shared';
+import {
+    close,
+    collect,
+    followCertificate,
+    HEADERS_TOO_LARGE,
+    listen,
+    receivedHeader,
+    smtpError,
+    tlsOptions
+} from './shared';
 import { dispositionOf, type InboundVerifier } from './verify';
 
 /**
@@ -140,6 +149,8 @@ export function createInboundServer(deps: InboundDeps): SmtpListener {
                         });
                         delivered += 1;
                     } catch (error) {
+                        // Le même message pour chaque boîte : refusé à la première, il n'est remis à aucune.
+                        if (error instanceof HeadersTooLargeError) throw smtpError(552, HEADERS_TOO_LARGE);
                         if (!(error instanceof OverQuotaError)) throw error;
                         full += 1;
                         await deps.events.record(mailbox, {

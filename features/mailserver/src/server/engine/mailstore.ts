@@ -26,6 +26,18 @@ export class OverQuotaError extends Error {
     }
 }
 
+/** Le bloc d'en-têtes qu'un message peut porter : `meta` le garde, et l'arbre le reprend ligne à ligne. */
+export const MAX_HEADER_BYTES = 1024 * 1024;
+
+/** `meta` est scellé en base64 dans un `MEDIUMTEXT` : au-delà, la ligne ne s'écrirait pas. */
+const MAX_META_BYTES = 12_000_000;
+
+export class HeadersTooLargeError extends Error {
+    constructor() {
+        super('En-têtes trop volumineux');
+    }
+}
+
 export interface MailStoreDeps {
     repo: MailserverRepo;
     blobs: BlobStore;
@@ -67,6 +79,7 @@ export interface MailStore {
     readBlob(mailbox: MailboxRow, blobId: number): Promise<Buffer>;
     /** Une référence de moins ; à zéro, la ligne et le fichier partent. */
     releaseBlob(blobId: number): Promise<void>;
+    /** Lève `HeadersTooLargeError` quand les en-têtes du message ne tiendraient pas dans sa ligne. */
     sealMeta(mailbox: MailboxRow, raw: Buffer): Promise<string>;
     /** Vide un dossier puis le retire. */
     deleteFolder(mailbox: MailboxRow, folder: FolderRow): Promise<void>;
@@ -100,8 +113,13 @@ export function createMailStore(deps: MailStoreDeps): MailStore {
 
     async function sealMeta(mailbox: MailboxRow, raw: Buffer): Promise<string> {
         const tree = parseMime(raw);
+        if (tree.bodyStart > MAX_HEADER_BYTES) throw new HeadersTooLargeError();
         const meta: MessageMeta = { head: raw.subarray(0, tree.bodyStart).toString('latin1'), tree };
-        return deps.cipherFor(mailbox.workspace_id).encrypt(JSON.stringify(meta));
+        const json = JSON.stringify(meta);
+        // Un octet de contrôle s'écrit six fois plus gros en JSON, et un message enfermé
+        // apporte ses propres en-têtes : la borne du bloc ne suffit pas à elle seule.
+        if (Buffer.byteLength(json) > MAX_META_BYTES) throw new HeadersTooLargeError();
+        return deps.cipherFor(mailbox.workspace_id).encrypt(json);
     }
 
     async function writeBlob(mailbox: MailboxRow, raw: Buffer): Promise<BlobRow> {

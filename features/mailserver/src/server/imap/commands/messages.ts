@@ -1,5 +1,5 @@
 import { now } from '../../_shared';
-import { FLAG, OverQuotaError } from '../../engine/mailstore';
+import { FLAG, HeadersTooLargeError, OverQuotaError } from '../../engine/mailstore';
 import { flagList, parseFlags, type Located } from '../mailboxView';
 import { stringOf, type Command, type Token } from '../parser';
 import { compactUids, parseSequenceSet, type SequenceRange } from '../sequence';
@@ -153,6 +153,7 @@ async function appendCommand(session: ImapSession, cmd: Command): Promise<void> 
         session.ok(cmd, 'APPEND completed', `APPENDUID ${folder.uid_validity} ${message.uid}`);
     } catch (error) {
         if (error instanceof OverQuotaError) return session.no(cmd, 'Mailbox is full', 'OVERQUOTA');
+        if (error instanceof HeadersTooLargeError) return session.no(cmd, 'Message header too large', 'TOOBIG');
         throw error;
     }
 }

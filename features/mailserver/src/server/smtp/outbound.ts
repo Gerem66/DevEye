@@ -8,7 +8,7 @@ import { now, queueContentSchema, seal, unseal } from '../_shared';
 import { ensureDomainKey, openPrivateKey } from '../dkim';
 import { NO_VERDICTS, type Delivery } from '../engine/delivery';
 import type { EventRecorder } from '../engine/events';
-import { OverQuotaError, type MailStore } from '../engine/mailstore';
+import { HeadersTooLargeError, OverQuotaError, type MailStore } from '../engine/mailstore';
 import type { MailboxRow, MailserverRepo, QueueRow } from '../repo';
 import { buildBounce } from './dsn';
 
@@ -188,7 +188,8 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
                 junk: false
             });
         } catch (error) {
-            if (!(error instanceof OverQuotaError)) throw error;
+            // Un avis qui ne peut pas être rangé se perd, il ne bloque pas la file.
+            if (!(error instanceof OverQuotaError || error instanceof HeadersTooLargeError)) throw error;
         }
     }
 
@@ -221,13 +222,20 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
             const message = (error as Error).message;
             const attempts = row.attempts + 1;
             const permanent =
-                error instanceof PermanentFailure || error instanceof OverQuotaError || attempts > RETRY_MINUTES.length;
+                error instanceof PermanentFailure ||
+                error instanceof OverQuotaError ||
+                error instanceof HeadersTooLargeError ||
+                attempts > RETRY_MINUTES.length;
             if (permanent) {
                 await bounce(
                     mailbox,
                     content.rcpt,
                     raw,
-                    error instanceof OverQuotaError ? '5.2.2 Boîte pleine' : message
+                    error instanceof OverQuotaError
+                        ? '5.2.2 Boîte pleine'
+                        : error instanceof HeadersTooLargeError
+                          ? '5.3.4 En-têtes trop volumineux'
+                          : message
                 );
                 return finish();
             }

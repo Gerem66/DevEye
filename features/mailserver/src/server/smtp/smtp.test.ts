@@ -10,6 +10,7 @@ import { SMTPServer } from 'smtp-server';
 import { queueContentSchema, toEvent, unseal } from '../_shared';
 import { dkimRecordName, dkimRecordValue } from '../dkim';
 import type { Verdicts } from '../engine/delivery';
+import { HeadersTooLargeError } from '../engine/mailstore';
 import { createTestEngine, selfSigned, testTlsStore } from '../testing/harness';
 import { createInboundServer, type SmtpListener } from './inbound';
 import { createOutbound } from './outbound';
@@ -183,6 +184,67 @@ describe('le port 25', () => {
             send(inboundPort, { from: 'x@ailleurs.test', to: 'bob@exemple.test', text: 'x'.repeat(80 * 1024) }),
             code(552)
         );
+    });
+});
+
+describe('des en-têtes que la boîte ne peut pas garder', () => {
+    it('font refuser le message en 552 à sa réception, pour toutes ses boîtes', async () => {
+        const refusing = createInboundServer({
+            hostname: 'mx.exemple.test',
+            maxBytes: 64 * 1024,
+            certificates: testTlsStore(),
+            delivery: { ...engine.delivery, deliver: () => Promise.reject(new HeadersTooLargeError()) },
+            events: engine.events,
+            verify: () => Promise.resolve(check()),
+            logger: engine.deps.logger
+        });
+        try {
+            const port = await refusing.listen(0);
+            const before = (await inboxOf('alice@exemple.test')).messages.length;
+            await assert.rejects(
+                send(port, { from: 'x@ailleurs.test', to: ['bob@exemple.test', 'alice@exemple.test'] }),
+                (error: { responseCode?: number; response?: string }) =>
+                    error.responseCode === 552 && /5\.3\.4/.test(error.response ?? '')
+            );
+            assert.equal((await inboxOf('alice@exemple.test')).messages.length, before);
+        } finally {
+            await refusing.stop();
+        }
+    });
+
+    it('font refuser l’envoi en 552 avant la file : rien n’est parti', async () => {
+        const refusing = createSubmissionServer(
+            {
+                hostname: 'mx.exemple.test',
+                maxBytes: 64 * 1024,
+                certificates: testTlsStore(),
+                repo: engine.repo,
+                pauses: engine.deps.pauses,
+                store: { ...engine.store, sealMeta: () => Promise.reject(new HeadersTooLargeError()) },
+                auth: engine.auth,
+                cipherFor: engine.deps.cipherFor,
+                kick: () => undefined,
+                logger: engine.deps.logger
+            },
+            true
+        );
+        try {
+            const port = await refusing.listen(0);
+            const queued = engine.repo.queue.length;
+            const blobs = engine.repo.blobs.length;
+            await assert.rejects(
+                send(
+                    port,
+                    { from: 'alice@exemple.test', to: 'un@ailleurs.test' },
+                    { user: 'alice@exemple.test', pass: 'secret-d-alice' }
+                ),
+                code(552)
+            );
+            assert.equal(engine.repo.queue.length, queued);
+            assert.equal(engine.repo.blobs.length, blobs);
+        } finally {
+            await refusing.stop();
+        }
     });
 });
 
