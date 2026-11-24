@@ -722,6 +722,55 @@ partir d'entrées bien formées, puis les abîmer. Pour un schéma zod,
 agent, `src/agent/frame.property.test.ts`), et lève devant une contrainte qu'il
 ne sait pas lire au lieu de tirer à côté.
 
+**Composants.** Un composant se teste dans un `X.test.tsx` posé à côté de
+`X.tsx`, avec `node:test` et `@testing-library/react`, sans navigateur :
+`npm run test:ui` dans `client/` les lance, ceux du client comme ceux des
+modules du dépôt (`features/*/src/client`). Le préchargement (`client/test/`)
+donne un DOM (jsdom), rend les modules CSS en noms de classe (`styles.title`
+vaut `'title'`), coupe les animations, et ferme le réseau : une requête HTTP
+échoue comme hors ligne, et une socket ne s'ouvre que par le serveur des tests.
+
+Ce serveur, `fakeServer()`, ne remplace que la socket : `ws.send`, les
+magasins et les invites tournent pour de vrai, et aucun module n'est simulé.
+Un module l'importe de `deveye-sdk-client/testing`, le client de
+`@/test/fakeServer`.
+
+```tsx
+const server = fakeServer(); // en tête de fichier
+
+test('la commande affichée suit le code reçu', async () => {
+    server.feature(manifest).on('devices.linkCodeList', () => ({ codes: [CODE], server: ORIGIN, quota: null }));
+    await server.connect();
+    const user = userEvent.setup();
+    render(<Pairing />);
+    await user.click(await screen.findByRole('radio', { name: 'Contrôle complet' }));
+    assert.ok(document.querySelector('pre')?.textContent?.includes('--allow all'));
+});
+```
+
+- Une réponse passe par le schéma de sortie de sa commande : un test ne fait
+  pas dire au serveur ce que le vrai ne dirait pas. Lever `new Refusal(code)`
+  refuse la commande.
+- Une commande partie sans réponse déclarée fait échouer le test, sauf celles
+  que le client envoie de lui-même à chaque ouverture, qui reçoivent la réponse
+  d'un compte ordinaire. `server.calls(commande)` rend ce qui a été reçu.
+- Les éléments se cherchent comme une personne les trouve : par rôle et par
+  nom (`getByRole('button', { name: 'Copier la commande' })`), pas par classe.
+- Jamais un élément du DOM dans `assert.equal` ou `deepEqual` : à l'échec, Node
+  inspecte l'élément et, par React, l'application entière, jusqu'à saturer la
+  mémoire. Comparer un texte ou un booléen, ou passer par `assert.ok`.
+- Un fichier de test est un processus : les magasins du client repartent de
+  zéro d'un fichier à l'autre, pas d'un test à l'autre.
+
+`npm run check:ui-tests` tient le cliquet (`client/ui-tests.json`) : tout
+`.tsx` a son test, ou figure dans `untested`, dont `ceiling` plafonne la taille
+et ne fait que baisser. Un composant nouveau arrive donc avec son test, et un
+fichier renommé change de ligne sans en ajouter. `strict` nomme les dossiers
+où aucune entrée n'est admise. Après avoir écrit un test,
+`node scripts/check-ui-tests.mjs --prune` retire sa ligne et abaisse le
+plafond. Les modules privés et le modèle de module tiers n'ont pas encore ce
+harnais.
+
 L'IDE : `features/tsconfig.json` est le projet CLIENT des modules in-repo (étend
 celui du client : alias `deveye-sdk-client`, JSX) ; leur part serveur et leurs
 contrats sont inclus par le tsconfig racine, et

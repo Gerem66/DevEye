@@ -17,7 +17,8 @@
       "zod": ["../node_modules/zod"],
       "zod/*": ["../node_modules/zod/*"],
       "@/*": ["./src/*"],
-      "deveye-sdk-client": ["./src/sdk/index.ts"]
+      "deveye-sdk-client": ["./src/sdk/index.ts"],
+      "deveye-sdk-client/testing": ["./src/sdk/testing.ts"]
     }
   },
   "include": ["src"],

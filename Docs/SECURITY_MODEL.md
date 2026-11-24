@@ -944,6 +944,14 @@ qui est rendu respecte le contrat qui le reçoit, et le coût reste borné par l
 taille de l'entrée. Les autres lecteurs (types publics, agent, modules privés)
 ne le sont pas encore.
 
+L'interface a ses tests de composants, joués sans navigateur contre un serveur
+de théâtre qui ne remplace que la socket : le reste du client tourne pour de
+vrai. Deux composants en ont aujourd'hui, l'invite du mot de passe (il ne part
+qu'une fois, et s'efface du champ sur tout échec) et la fenêtre d'appairage
+d'un appareil (la commande à copier ne donne aucun droit sans un geste, et
+porte exactement ceux qui sont cochés). Les autres sont nommés dans
+`client/ui-tests.json`, une liste qui ne peut que raccourcir.
+
 Ces contrôles sont écrits et tenus par le projet lui-même. Aucun tiers n'a
 encore audité DevEye ni tenté de s'y introduire : les garanties de ce document
 sont celles que le code et ses tests soutiennent, pas des garanties certifiées.

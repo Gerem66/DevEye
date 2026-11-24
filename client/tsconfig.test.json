@@ -1,0 +1,5 @@
+{
+  "$comment": "Ce que tsx compile pour `npm run test:ui` : le client et le code des modules in-repo, que le tsconfig du client n'inclut pas. Sans lui, un fichier de module serait compilé sans le JSX ni les alias du client.",
+  "extends": "./tsconfig.json",
+  "include": ["src", "../features/*/src"]
+}

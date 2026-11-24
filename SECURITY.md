@@ -75,6 +75,14 @@ nothing throws but the expected error, what comes out satisfies the contract
 that receives it, and the cost stays bounded by the size of the input. The
 other readers (public types, agent, private modules) are not covered yet.
 
+The interface has component tests, run without a browser against a stand-in
+server that replaces the socket only: the rest of the client runs for real.
+Two components have them today, the password prompt (the password is sent
+once, and cleared from the field on any failure) and the device pairing dialog
+(the command to copy grants nothing without a deliberate choice, and carries
+exactly the rights that are ticked). The others are named in
+`client/ui-tests.json`, a list that can only get shorter.
+
 These checks are written and maintained by the project itself. No third party
 has audited DevEye or tested it for intrusion yet: read the guarantees of the
 security model as claims the code and its tests back, not as certified ones.
