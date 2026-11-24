@@ -1,9 +1,5 @@
 {
   "exempt": {
-    "src/server/move.ts#nameTaken": {
-      "kind": "row",
-      "reason": "Le déplacement vient de constater que la base habite l'espace de l'appelant (loadHome, par findVisible)."
-    },
     "src/server/repo.ts#recordCheck": {
       "kind": "service",
       "reason": "Le relevé écrit sur la base qu'il vient de relire dans son espace (find), pour l'ordonnanceur comme pour database.inspect."

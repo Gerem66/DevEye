@@ -1,5 +1,11 @@
 -- Schéma généré par `npm run gen:db-schema` depuis une base migrée. Ne pas éditer.
 
+CREATE TABLE `_data_steps` (
+  `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `applied_at` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `_migrations` (
   `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
   `applied_at` bigint NOT NULL DEFAULT (unix_timestamp()),
@@ -212,7 +218,7 @@ CREATE TABLE `database_connections` (
   `id` int NOT NULL AUTO_INCREMENT,
   `workspace_id` int NOT NULL,
   `engine` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'mysql',
-  `name_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `name_ref` char(32) COLLATE utf8mb4_general_ci NOT NULL,
   `sort_order` int NOT NULL DEFAULT '0',
   `monitor_enabled` tinyint NOT NULL DEFAULT '0',
   `interval_seconds` int NOT NULL DEFAULT '300',

@@ -913,9 +913,16 @@ s'il ne sait pas l'ouvrir, plutôt que d'en tirer une autre.
 
 Aujourd'hui, elle porte le condensé de l'identifiant saisi lors d'une connexion
 ratée sur un compte inconnu (`usernameRef` au journal d'audit, où l'on tape
-parfois son mot de passe par erreur). Les condensés de Git, de Bases,
+parfois son mot de passe par erreur) et le nom d'une base de données
+(`database_connections.name_ref`, lié à l'espace). Les condensés de Git,
 d'Audience, des Liens courts, des Stores et du module Audit sont encore des
 SHA-256 nus.
+
+Un condensé lié à un espace ne le quitte pas : une copie arrive avec ceux de
+sa destination, un déplacement les recalcule. Les lignes écrites sous l'ancien
+format sont reprises par une étape de données, au premier démarrage qui la
+porte ; si la clé d'un espace ne s'ouvre pas, le serveur refuse de démarrer
+plutôt que de laisser cet espace à l'ancien format.
 
 ## Ce que le serveur ne lit jamais
 

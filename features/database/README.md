@@ -124,10 +124,14 @@ chaîne vide pour l'effacer.
 
 ### 2.3 Ce qui doit être unique ne peut pas être chiffré
 
-Le nom porte l'unicité dans l'espace, via `name_ref` (16 caractères du sha256 du
-nom en minuscules). Même motif que `slug_ref` pour un dépôt git, et pour la même
-raison : le chiffrement n'étant pas déterministe, `content` ne peut porter
-aucune contrainte d'unicité.
+Le nom porte l'unicité dans l'espace, via `name_ref` : un condensé à clé
+(`keys.ref`, 32 caractères) du nom en minuscules, lié à l'espace. Le
+chiffrement n'étant pas déterministe, `content` ne peut porter aucune
+contrainte d'unicité ; et un SHA-256 nu se recalculerait en devinant le nom.
+
+Lié à l'espace, le condensé ne voyage pas : l'arbre de `copy.ts` le déclare
+(`digests`), une copie arrive avec celui de sa destination, un déplacement le
+recalcule, et l'étape de données `001-keyed-refs` a repris les lignes d'avant.
 
 ### 2.4 La table s'appelle `database_connections`
 

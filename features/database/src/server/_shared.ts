@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import type {
     Database,
     DatabaseAlert,
@@ -10,7 +9,14 @@ import type {
 } from '../contracts/domain';
 import { databaseAlertSchema, databaseKpiSchema, databaseSchema } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import {
+    FeatureError,
+    itemDigest,
+    type ItemDigestKeys,
+    type ItemTreeDigest,
+    type SdkCipher,
+    type SdkFeatureContext
+} from '@deveye/types/sdk/server';
 
 import type { DatabaseRepo, DatabaseWithStatsRow } from './repo';
 import type { DatabaseMonitor } from './service';
@@ -163,12 +169,25 @@ export function monitorOf(): DatabaseMonitor {
     return monitorRef;
 }
 
+/** Le nom tel qu'il se compare : deux écritures du même nom se confondent. */
+const comparableName = (name: string): string => name.trim().toLowerCase();
+
 /**
- * L'identité d'une base dans l'espace : le chiffrement étant non déterministe,
- * `content` ne peut porter l'unicité, ce condensé la porte à sa place.
+ * L'identité d'une base dans son espace : le chiffrement étant non déterministe,
+ * `content` ne peut porter l'unicité, ce condensé à clé la porte à sa place.
+ * Lié à l'espace : le même nom donne ailleurs un condensé sans rapport, que la
+ * copie et le déplacement recalculent.
  */
-export function nameRef(name: string): string {
-    return createHash('sha256').update(name.trim().toLowerCase()).digest('hex').slice(0, 16);
+export const NAME_DIGEST: ItemTreeDigest = {
+    column: 'name_ref',
+    purpose: 'name',
+    within: 'workspace',
+    from: 'content',
+    of: (plain) => comparableName((JSON.parse(plain) as StoredDatabase).name)
+};
+
+export function nameRef(keys: ItemDigestKeys, workspaceId: number, name: string): string {
+    return itemDigest(keys, NAME_DIGEST, { workspaceId, itemId: 0 }, comparableName(name));
 }
 
 /** Déchiffre et parse, sans jamais lever : `null` dit simplement « illisible ». */

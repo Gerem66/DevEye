@@ -55,12 +55,15 @@ interface FakeRepo extends DatabaseRepo {
     alerts: DatabaseAlertRow[];
 }
 
+/** Le condensé d'un nom dans un espace, tel que les handlers le calculent sous les clés du harnais. */
+const refOf = (name: string, workspaceId = 1): string => nameRef(createTestContext().keys, workspaceId, name);
+
 /** Une ligne telle que le vrai dépôt la rendrait ; le harnais chiffre à l'identité. */
 function row(over: Partial<DatabaseRow> & { id: number; workspace_id: number }): DatabaseRow {
     const name = `Base ${over.id}`;
     return {
         engine: 'mysql',
-        name_ref: nameRef(name),
+        name_ref: refOf(name, over.workspace_id),
         sort_order: over.id,
         monitor_enabled: 0,
         interval_seconds: 300,
@@ -466,7 +469,7 @@ describe('database.add', () => {
     };
 
     it('refuse un nom déjà pris dans l’espace', async () => {
-        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1, name_ref: nameRef('prod') }));
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1, name_ref: refOf('prod') }));
         await assert.rejects(handlerFor(databaseAdd)(createTestContext({ repo }), body), failsWith('conflict'));
         assert.equal(repo.rows.length, 1);
     });
@@ -485,7 +488,7 @@ describe('database.add', () => {
         // Le harnais chiffre à l'identité : les secrets sont dans leurs colonnes.
         assert.equal(repo.rows[0].secret_enc, 'secret');
         assert.equal(repo.rows[0].access_secret_enc, 'clé');
-        assert.equal(repo.rows[0].name_ref, nameRef('Prod'));
+        assert.equal(repo.rows[0].name_ref, refOf('Prod'));
         assert.deepEqual(
             ctx.recorded.audits.map((a) => a.action),
             ['database.add']
@@ -600,7 +603,7 @@ describe('database.update', () => {
         const repo = seed(
             fakeRepo(),
             row({ id: 1, workspace_id: 1 }),
-            row({ id: 2, workspace_id: 1, name_ref: nameRef('Prod renommée') })
+            row({ id: 2, workspace_id: 1, name_ref: refOf('Prod renommée') })
         );
         const ctx = createTestContext({ repo });
         await assert.rejects(handlerFor(databaseUpdate)(ctx, { databaseId: 1, ...SAME }), failsWith('conflict'));

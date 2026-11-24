@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import type { DatabaseRow } from '../contracts/domain';
 import {
     DATABASE_BACKUP_PROVIDER,
@@ -9,12 +12,18 @@ import {
     type DatabaseMeasureProvider,
     type DatabaseNumberOutcome
 } from '@deveye/types/sdk';
-import type { FeatureServer, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
+import {
+    rekeyTreeDigests,
+    type FeatureServer,
+    type FeatureServiceDeps,
+    type SdkCipher
+} from '@deveye/types/sdk/server';
 
 import { databaseAccountExport } from './accountExport';
 import { assertReadOnly, explainError, openSession, singleNumber } from './engine';
 import { databaseHandlers } from './handlers';
-import { databaseCopy } from './copy';
+import { databaseCopy, databaseTree } from './copy';
+import { databaseE2e } from './e2e';
 import { databaseMove } from './move';
 import { createRepo, type DatabaseRepo } from './repo';
 import { DatabaseMonitor } from './service';
@@ -145,12 +154,29 @@ async function labelOf(
  * singleton pour les handlers, les contrats offerts à Sauvegardes et à Projets,
  * et `items` (domicile et nom d'une base) qu'exige `shareTier: 'open'`.
  *
- * Pas de `migrationsDir` : les tables du module datent du socle (allowlist dans
- * deveye-feature.json) ; une nouvelle table inaugurera `src/server/migrations/`
- * avec le préfixe `ft_database_`.
+ * Les tables du module datent du socle (allowlist dans deveye-feature.json) :
+ * ses migrations ne font que les modifier, et une nouvelle table prendra le
+ * préfixe `ft_database_`.
  */
 export const serverEntry: FeatureServer<DatabaseRepo> = {
     createRepo,
+    migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    dataSteps: [
+        {
+            // Le condensé du nom passe d'un SHA-256 nu à `keys.ref`, lié à l'espace.
+            id: '001-keyed-refs',
+            async run({ q, cipherFor, keys, logger }) {
+                const pass = await rekeyTreeDigests(q, databaseTree, { cipherFor, keys });
+                // Une fiche illisible ne peut plus tenir son nom : il redevient libre dans son espace.
+                if (pass.unreadable > 0) {
+                    logger.error(
+                        { unreadable: pass.unreadable },
+                        'Bases : des fiches illisibles ont perdu leur nom unique'
+                    );
+                }
+            }
+        }
+    ],
     features: databaseHandlers,
     createService(deps) {
         const monitor = new DatabaseMonitor(deps);
@@ -208,5 +234,6 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
         copy: databaseCopy
     },
     quotas: { connections: { list: (repo, owned) => repo.listStock(owned) } },
-    accountExport: databaseAccountExport
+    accountExport: databaseAccountExport,
+    e2e: databaseE2e
 };

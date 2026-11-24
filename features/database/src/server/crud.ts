@@ -129,7 +129,7 @@ export const databaseCrudFeatures = [
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const cipher = ctx.cipher();
-            const ref = nameRef(input.name);
+            const ref = nameRef(ctx.keys, ctx.workspaceId, input.name);
 
             // Le nom porte l'unicité dans l'espace.
             if (await ctx.repo.findByName(ctx.workspaceId, ref)) {
@@ -181,7 +181,7 @@ export const databaseCrudFeatures = [
                 );
             }
             const cipher = ctx.cipher();
-            const ref = nameRef(input.name);
+            const ref = nameRef(ctx.keys, ctx.workspaceId, input.name);
 
             const clash = await ctx.repo.findByName(ctx.workspaceId, ref);
             if (clash && clash.id !== input.databaseId) {

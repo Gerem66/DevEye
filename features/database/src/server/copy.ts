@@ -1,6 +1,7 @@
 import type { FeatureItemsCopy, ItemTree } from '@deveye/types/sdk/server';
 
 import type { DatabaseRepo } from './repo';
+import { NAME_DIGEST } from './_shared';
 
 /**
  * Ce dont une base est faite : sa connexion, ses indicateurs et ses alertes. C'est la liste que
@@ -19,9 +20,10 @@ export const databaseTree: ItemTree = [
         ownerColumn: 'id',
         workspaceColumn: 'workspace_id',
         orderColumn: 'sort_order',
-        // Le nom est unique par espace, par un condensé (`nameRef`) : il voyage
-        // tel quel, n'étant dérivé que du nom.
+        // Le nom est unique par espace, par un condensé lié à cet espace : il ne
+        // voyage pas, la destination calcule le sien.
         unique: { column: 'name_ref', message: 'Une base du même nom existe déjà dans cet espace.' },
+        digests: [NAME_DIGEST],
         sealed: ['content', 'secret_enc', 'access_content', 'access_secret_enc', 'last_error', 'kpis', 'kpi_values'],
         // Une copie passe par le navigateur de qui la fait, qui peut n'avoir que
         // la lecture : les secrets restent sur le serveur, rescellés au seul
