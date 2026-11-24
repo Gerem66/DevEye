@@ -1,3 +1,4 @@
+import { calendarDaySchema } from '@deveye/types/sdk';
 import { z } from 'zod';
 
 /**
@@ -38,7 +39,8 @@ export const vatRateBpSchema = z.number().int().min(0).max(10_000);
 /** Une part d'acompte en points de base : `3000` vaut 30 %. */
 export const depositBpSchema = z.number().int().min(0).max(10_000);
 
-export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ');
+/** Un jour civil, `AAAA-MM-JJ`, qui existe : la colonne `DATE` refuserait les autres. */
+export const daySchema = calendarDaySchema('Date attendue au format AAAA-MM-JJ');
 
 /** ISO 4217. Une seule devise par espace : le multidevise exigerait un taux daté par pièce. */
 export const currencySchema = z.string().regex(/^[A-Z]{3}$/);

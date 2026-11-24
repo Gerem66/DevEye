@@ -1,3 +1,4 @@
+import { calendarDaySchema } from '@deveye/types/sdk';
 import { z } from 'zod';
 
 /**
@@ -23,8 +24,8 @@ export const financeAmountSchema = z.number().int().nonnegative().max(FINANCE_AM
 /** Un solde, lui, est signé: un compte peut être à découvert. */
 export const financeBalanceSchema = z.number().int().min(-FINANCE_AMOUNT_MAX).max(FINANCE_AMOUNT_MAX);
 
-/** Un jour civil, `AAAA-MM-JJ`. */
-export const financeDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ');
+/** Un jour civil, `AAAA-MM-JJ`, qui existe : la colonne `DATE` refuserait les autres. */
+export const financeDateSchema = calendarDaySchema('Date attendue au format AAAA-MM-JJ');
 
 /** Un mois civil, `AAAA-MM`, tel que le rendent les séries du tableau de bord. */
 export const financeMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
