@@ -29,7 +29,7 @@ describe('les condensés de Git', () => {
             const digest = gitTree.find((t) => t.table === table)?.digests?.[0];
             assert.ok(digest, table);
             return (stored: object, repoId: number, workspaceId = 1) => {
-                const value = digest.of(JSON.stringify(stored));
+                const value = digest.of(JSON.stringify(stored), {});
                 assert.ok(value !== null);
                 return keys.ref(digest.purpose, digest.within === 'workspace' ? workspaceId : repoId, value);
             };

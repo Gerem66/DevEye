@@ -566,13 +566,22 @@ blanc et Stores se copient.
 
 Une colonne qui tient le condensé à clé d'une valeur chiffrée se déclare dans
 l'arbre (`digests` : la colonne, l'usage, la portée `'workspace'` ou `'item'`,
-la colonne scellée d'où la valeur se tire, et la fonction qui l'en extrait).
-Le moteur la calcule alors partout où une ligne change de place : une copie
-n'emporte aucun condensé et arrive avec les siens, `itemDigestTaken` dit à un
-`move.plan` si le nom est pris à l'arrivée, `rekeyItemDigests` les recalcule
-dans `move.apply` après `resealCells`, et `rekeyTreeDigests` reprend toute une
-table. Les handlers calculent la même valeur par `itemDigest`. Réservé à un
-arbre que le serveur lit toujours : pas avec `tier`.
+la colonne scellée d'où la valeur se tire, et la fonction qui l'en extrait,
+qui reçoit aussi la ligne pour ce qu'une colonne en clair y ajoute : le store
+d'un identifiant). Le moteur la calcule alors partout où une ligne change de
+place : une copie n'emporte aucun condensé et arrive avec les siens,
+`itemDigestTaken` dit à un `move.plan` si un condensé `unique` de l'élément est
+pris à l'arrivée (son nom sur la racine, la fiche d'une app sur une table
+fille), `rekeyItemDigests` les recalcule dans `move.apply` après
+`resealCells`, et `rekeyTreeDigests` reprend toute une table. Les handlers
+calculent la même valeur par `itemDigest`. Réservé à un arbre que le serveur
+lit toujours : pas avec `tier`.
+
+Une reprise ne s'arrête ni sur une cellule illisible ni sur un doublon (deux
+lignes que l'ancien condensé distinguait et que le nouveau confond) : la ligne
+reçoit un condensé à elle, que rien ne retrouve, et `rekeyTreeDigests` les
+compte (`unreadable`, `duplicates`) pour que l'étape les journalise. Un
+déplacement, lui, s'arrête sur le refus de la base.
 
 ### Les quotas et les pauses
 

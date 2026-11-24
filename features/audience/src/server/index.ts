@@ -62,10 +62,10 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
             async run({ q, cipherFor, keys, logger }) {
                 const pass = await rekeyTreeDigests(q, audienceTree, { cipherFor, keys });
                 // Un libellé illisible ne se retrouve plus : la prochaine mesure de la même page en crée un autre.
-                if (pass.unreadable > 0) {
+                if (pass.unreadable > 0 || pass.duplicates > 0) {
                     logger.error(
-                        { unreadable: pass.unreadable },
-                        'Audience : des lignes illisibles ont perdu leur condensé'
+                        { unreadable: pass.unreadable, duplicates: pass.duplicates },
+                        'Audience : des lignes illisibles ou en double ont perdu leur condensé'
                     );
                 }
             }

@@ -112,10 +112,10 @@ export const serverEntry: FeatureServer<GitRepo> = {
             async run({ q, cipherFor, keys, logger }) {
                 const pass = await rekeyTreeDigests(q, gitTree, { cipherFor, keys });
                 // Une ligne illisible ne se rattache plus à rien : un commit sans auteur, une branche sans nom.
-                if (pass.unreadable > 0) {
+                if (pass.unreadable > 0 || pass.duplicates > 0) {
                     logger.error(
-                        { unreadable: pass.unreadable },
-                        'Git : des lignes illisibles ont perdu leur condensé'
+                        { unreadable: pass.unreadable, duplicates: pass.duplicates },
+                        'Git : des lignes illisibles ou en double ont perdu leur condensé'
                     );
                 }
             }

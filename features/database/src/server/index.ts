@@ -168,10 +168,10 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
             async run({ q, cipherFor, keys, logger }) {
                 const pass = await rekeyTreeDigests(q, databaseTree, { cipherFor, keys });
                 // Une fiche illisible ne peut plus tenir son nom : il redevient libre dans son espace.
-                if (pass.unreadable > 0) {
+                if (pass.unreadable > 0 || pass.duplicates > 0) {
                     logger.error(
-                        { unreadable: pass.unreadable },
-                        'Bases : des fiches illisibles ont perdu leur nom unique'
+                        { unreadable: pass.unreadable, duplicates: pass.duplicates },
+                        'Bases : des fiches illisibles ou en double ont perdu leur nom unique'
                     );
                 }
             }

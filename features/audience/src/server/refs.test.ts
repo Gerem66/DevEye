@@ -11,7 +11,7 @@ const { keys } = createTestContext();
 function fromTree(table: string, stored: string, siteId: number, workspaceId = 1): string {
     const digest = audienceTree.find((t) => t.table === table)?.digests?.[0];
     assert.ok(digest, table);
-    const value = digest.of(stored);
+    const value = digest.of(stored, {});
     assert.ok(value !== null);
     return keys.ref(digest.purpose, digest.within === 'workspace' ? workspaceId : siteId, value);
 }
