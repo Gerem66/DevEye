@@ -7,6 +7,10 @@ import { FILE_MAX_BYTES, FILES_BATCH_CHARS, type BoardFile, type WhiteboardFileM
 import { newObjectKey, now, whiteboard } from './_shared';
 import type { BoardRow, FileRow, WhiteboardRepo } from './repo';
 
+/** Ce que lit qui envoie une image : le détail reste au journal, la variable à régler est nommée. */
+export const STORAGE_REFUSAL =
+    'Le stockage des images n’est pas utilisable sur ce serveur : son administrateur doit régler WHITEBOARD_STORAGE_DIR.';
+
 const EXTENSION: Record<WhiteboardFileMime, string> = {
     'image/png': 'png',
     'image/jpeg': 'jpg',
@@ -108,8 +112,7 @@ export async function addFile(input: FileAddInput): Promise<{ created: boolean }
     }
 
     const runtime = whiteboard();
-    const problem = await runtime.storageProblem();
-    if (problem !== null) throw new FeatureError('internal', problem);
+    if ((await runtime.storageProblem()) !== null) throw new FeatureError('conflict', STORAGE_REFUSAL);
 
     const bytes = decodeDataUrl(input.dataURL, input.mime);
     if (!looksLike(bytes, input.mime)) throw new FeatureError('validation', 'Ce fichier n’est pas l’image annoncée.');

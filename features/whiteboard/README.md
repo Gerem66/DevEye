@@ -229,7 +229,9 @@ fichier.
 `WHITEBOARD_STORAGE_DIR` (défaut `/data/whiteboard`) est le dossier des images
 tant que le serveur les garde sur son disque ; dans un conteneur, un volume
 monté (`WHITEBOARD_STORAGE_ROOT` dans les fichiers compose). Un dossier sur
-aucun volume est refusé à l'envoi d'une image. Avec un stockage S3
+aucun volume est refusé à l'envoi d'une image : le membre lit une phrase qui
+nomme la variable à régler, le détail (chemin, erreur du système) reste au
+journal du serveur. Avec un stockage S3
 (`STORAGE_S3_*`), les images partent sous `<préfixe>/whiteboard/`.
 
 Un balayage quotidien retire les images orphelines depuis plus d'un jour et les
