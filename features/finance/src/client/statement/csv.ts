@@ -1,3 +1,4 @@
+import { FINANCE_AMOUNT_MAX } from '../../contracts/domain';
 import { STATEMENT_LABEL_MAX_LENGTH, type StatementClosing, type StatementLineInput } from '../../contracts/statement';
 
 /**
@@ -53,28 +54,37 @@ function records(text: string, separator: string): string[][] {
     const rows: string[][] = [];
     let row: string[] = [];
     let cell = '';
+    // Suivi au fil de l'eau : relire la cellule à chaque guillemet coûterait le carré de sa longueur.
+    let blank = true;
     let quoted = false;
+    const add = (c: string): void => {
+        cell += c;
+        if (blank && c.trim() !== '') blank = false;
+    };
+    const close = (): void => {
+        row.push(cell);
+        cell = '';
+        blank = true;
+    };
     for (let i = 0; i < text.length; i++) {
         const c = text[i];
         if (quoted) {
             if (c === '"' && text[i + 1] === '"') {
-                cell += '"';
+                add('"');
                 i += 1;
             } else if (c === '"') quoted = false;
-            else cell += c;
-        } else if (c === '"' && cell.trim() === '') {
+            else add(c);
+        } else if (c === '"' && blank) {
             quoted = true;
             cell = '';
         } else if (c === separator) {
-            row.push(cell);
-            cell = '';
+            close();
         } else if (c === '\n' || c === '\r') {
             if (c === '\r' && text[i + 1] === '\n') i += 1;
-            row.push(cell);
+            close();
             rows.push(row);
             row = [];
-            cell = '';
-        } else cell += c;
+        } else add(c);
     }
     if (cell !== '' || row.length > 0) {
         row.push(cell);
@@ -140,11 +150,14 @@ export function parseMoney(text: string): number | null {
     }
     if (!/^\d+(\.\d+)?$/.test(value)) return null;
     const cents = Math.round(Number(value) * 100);
+    // Au-delà du plafond, le serveur refuserait l'envoi entier : la ligne s'écarte comme une autre sans montant.
+    if (cents > FINANCE_AMOUNT_MAX) return null;
     return negative ? -cents : cents;
 }
 
 function isoDay(year: number, month: number, day: number): string | null {
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    // Une année de moins de quatre chiffres ne s'écrirait pas `AAAA`.
+    if (year < 1000 || month < 1 || month > 12 || day < 1 || day > 31) return null;
     const at = new Date(Date.UTC(year, month - 1, day));
     if (at.getUTCMonth() !== month - 1) return null;
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -188,7 +201,7 @@ export function parseCsvTable(text: string): CsvTable | null {
 
 /** Le nombre de colonnes d'une table : la ligne la plus large. */
 export function columnCount(table: CsvTable): number {
-    return Math.max(table.header?.length ?? 0, ...table.rows.map((row) => row.length));
+    return table.rows.reduce((widest, row) => Math.max(widest, row.length), table.header?.length ?? 0);
 }
 
 /** Le nom d'une colonne pour un sélecteur : son intitulé, sinon son rang. */

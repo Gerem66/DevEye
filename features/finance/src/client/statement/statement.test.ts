@@ -26,6 +26,12 @@ describe('parseMoney', () => {
         assert.equal(parseMoney('PRLV SEPA'), null);
         assert.equal(parseMoney('15/09/2026'), null);
     });
+
+    it('refuse un montant au-delà du plafond du livre, que le serveur n’accepterait pas', () => {
+        assert.equal(parseMoney('1 000 000 000 000,00'), 100_000_000_000_000);
+        assert.equal(parseMoney('1 000 000 000 000,01'), null);
+        assert.equal(parseMoney('9'.repeat(400)), null);
+    });
 });
 
 describe('parseDay', () => {
@@ -40,6 +46,11 @@ describe('parseDay', () => {
     it('refuse une date qui n’existe pas', () => {
         assert.equal(parseDay('31/02/2026'), null);
         assert.equal(parseDay('Compte courant'), null);
+    });
+
+    it('refuse une année qui ne s’écrit pas sur quatre chiffres', () => {
+        assert.equal(parseDay('0026-09-15'), null);
+        assert.equal(parseDay('15/09/0026'), null);
     });
 });
 
