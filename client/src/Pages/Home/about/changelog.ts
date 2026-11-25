@@ -12,6 +12,44 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.27.2',
+        date: '2026-11-25',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Bases de données : dans votre espace personnel, une base peut être « Protégée » par votre mot de passe, à sa création ou dans l’onglet Chiffrement de ses réglages ; session verrouillée, le serveur ne peut plus s’y connecter, et elle n’a alors ni relevé automatique, ni alerte, ni sauvegarde'
+            },
+            {
+                kind: 'improved',
+                text: 'Appareils : une machine que vous reliez n’est que surveillée tant que vous ne lui donnez pas d’autres droits, et la fenêtre d’appairage propose « Surveillance seule » d’abord ; le terminal root devient un droit à part, qui se ferme sur les machines déjà reliées à la mise à jour de leur agent, jusqu’à ce que vous nommiez un compte dans les réglages du terminal ou le rouvriez depuis la machine'
+            },
+            {
+                kind: 'improved',
+                text: 'Sécurité : une note privée, un projet confidentiel et une boîte mail protégée ne se proposent plus qu’aux comptes qui ont activé le chiffrement par mot de passe, sans lequel le serveur pouvait les lire, et les champs d’identifiants rappellent que le serveur garde de quoi les relire ; ce que la base de données garde pour reconnaître un nom, un auteur ou un constat sans le déchiffrer ne permet plus de le deviner ni de le rapprocher d’un autre espace'
+            },
+            {
+                kind: 'improved',
+                text: 'Abonnement : une offre sur mesure s’affiche sous son nom, avec sa carte à son prix et sa colonne dans le comparatif'
+            },
+            {
+                kind: 'fixed',
+                text: 'Appareils, Mail et CloudSync : les fichiers, les journaux, l’état Docker et les mises à jour d’une machine, comme l’avancement d’une relève de courrier ou d’un partage, ne sont plus envoyés qu’aux membres qui ont le droit de les demander ; un changement de rôle ne fait plus perdre la sortie d’un terminal, et « Rafraîchir maintenant » ne vide plus la liste des processus'
+            },
+            {
+                kind: 'fixed',
+                text: 'Finances et Facturation : un relevé CSV hors norme (montant démesuré, année abrégée, cellule pleine de guillemets, très long fichier) ne fige plus l’onglet et ne fait plus refuser tout l’import, et une date qui n’existe pas est refusée à la saisie au lieu d’échouer en erreur'
+            },
+            {
+                kind: 'fixed',
+                text: 'Tableau blanc : retirer le partage d’un tableau ferme aussitôt la séance de l’espace qui le suivait, qui pouvait encore y dessiner'
+            },
+            {
+                kind: 'fixed',
+                text: 'Serveur mail : un message fabriqué pour saturer le serveur, par des milliers de parties ou des en-têtes démesurés, est désormais borné à la lecture ou refusé à la remise'
+            }
+        ]
+    },
+    {
         version: '0.27.1',
         date: '2026-11-22',
         changes: [
